@@ -45,7 +45,7 @@ To republish manually:
 
 ```powershell
 $env:BASE_PATH='/kl-shadow-hunter/'; npm run build
-```powershell
+```
 
 Then push the contents of `dist/` to `gh-pages`.
 

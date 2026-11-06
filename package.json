@@ -1,0 +1,22 @@
+{
+  "name": "depot-strike",
+  "private": true,
+  "version": "1.0.0",
+  "description": "A tactical, round-based browser FPS inspired by classic early-2000s PC shooters. Built with Three.js and Vite.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test \"tests/*.test.js\"",
+    "smoke": "node scripts/smoke-test.mjs",
+    "assets": "node scripts/fetch-assets.mjs"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^23.11.1",
+    "vite": "^6.0.0"
+  }
+}

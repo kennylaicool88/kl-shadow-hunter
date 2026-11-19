@@ -12,11 +12,14 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
 
 // Graphics presets. pixelRatio is capped by the device ratio.
+// facadeDetail: distance (m) within which fine facade trim is drawn. atmosphere: height fog + sun
+// in-scatter post pass (High/Ultra, aimed at discrete GPUs). shadowRange: half-size of the sun
+// shadow frustum that follows the viewer (smaller = sharper).
 export const QUALITY = {
-  low: { label: 'Low', pixelRatio: 1, shadows: false, shadowSize: 1024, shadowType: THREE.PCFShadowMap, post: false, ao: false, bloom: false, msaa: 0, smaa: false, aniso: 2, propDistance: 45, detail: 0 },
-  medium: { label: 'Medium', pixelRatio: 1, shadows: true, shadowSize: 2048, shadowType: THREE.PCFShadowMap, post: true, ao: false, bloom: true, msaa: 0, smaa: true, aniso: 4, propDistance: 75, detail: 1 },
-  high: { label: 'High', pixelRatio: 1.25, shadows: true, shadowSize: 2048, shadowType: THREE.PCFSoftShadowMap, post: true, ao: true, aoSamples: 8, bloom: true, msaa: 0, smaa: true, aniso: 8, propDistance: 110, detail: 2 },
-  ultra: { label: 'Ultra', pixelRatio: 1.5, shadows: true, shadowSize: 4096, shadowType: THREE.PCFSoftShadowMap, post: true, ao: true, aoSamples: 16, bloom: true, msaa: 4, smaa: false, aniso: 16, propDistance: 170, detail: 3 },
+  low: { label: 'Low', pixelRatio: 1, shadows: false, shadowSize: 1024, shadowType: THREE.PCFShadowMap, post: false, ao: false, bloom: false, msaa: 0, smaa: false, aniso: 2, propDistance: 45, detail: 0, facadeDetail: 45, atmosphere: false, shadowRange: 50, rain: 2500 },
+  medium: { label: 'Medium', pixelRatio: 1, shadows: true, shadowSize: 2048, shadowType: THREE.PCFShadowMap, post: true, ao: false, bloom: true, msaa: 0, smaa: true, aniso: 4, propDistance: 75, detail: 1, facadeDetail: 80, atmosphere: false, shadowRange: 60, rain: 6000 },
+  high: { label: 'High', pixelRatio: 1.25, shadows: true, shadowSize: 4096, shadowType: THREE.PCFSoftShadowMap, post: true, ao: true, aoSamples: 8, bloom: true, msaa: 0, smaa: true, aniso: 8, propDistance: 140, detail: 2, facadeDetail: 160, atmosphere: true, shadowRange: 80, rain: 12000 },
+  ultra: { label: 'Ultra', pixelRatio: 1.5, shadows: true, shadowSize: 4096, shadowType: THREE.PCFSoftShadowMap, post: true, ao: true, aoSamples: 16, bloom: true, msaa: 4, smaa: false, aniso: 16, propDistance: 220, detail: 3, facadeDetail: 320, atmosphere: true, shadowRange: 90, rain: 20000 },
 };
 
 // 'auto' resolves from the GPU: integrated / mobile GPUs get Medium, everything else High.

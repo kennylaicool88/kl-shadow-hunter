@@ -87,7 +87,9 @@ export class StreetDressing {
         new THREE.ConeGeometry(0.2, 0.25, 8).translate(0, 3.9, 0),
       ].map((g) => g.toNonIndexed()));
       this.props.push(new InstancedProps(this.group, hi, place, {
-        name: 'street_lamp', castShadow: true, lod: { parts: [{ geometry: proxy, material: metal }], distance: 30 + this.q.detail * 8 },
+        // The scan's detail isn't visible beyond ~15 m; each hi chunk costs ~23k tris per lamp.
+        // Small chunks so the hi-detail swap applies to one lamp at a time, not a 40 m block of them.
+        name: 'street_lamp', castShadow: true, chunk: 12, lod: { parts: [{ geometry: proxy, material: metal }], distance: [14, 18, 30, 50][this.q.detail] || 18 },
       }));
     } else {
       // Documented fallback: simple pole geometry.
@@ -101,9 +103,15 @@ export class StreetDressing {
     const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 10, 6), this.bulbMat, this.lampPositions.length);
     this.lampPositions.forEach((p, i) => { _m.makeTranslation(p.x, p.y + 0.95, p.z); bulbs.setMatrixAt(i, _m); });
     this.group.add(bulbs);
-    // Real lights: a small pool re-assigned to the lamps nearest the viewer. Created only at night –
-    // every light in the scene costs every lit pixel, even at zero intensity.
+    // Real lights: a small pool re-assigned to the lamps nearest the viewer. Always present (at zero
+    // intensity by day): changing the scene's light count recompiles every shader.
     this.lightPool = [];
+    for (let i = 0; i < 4; i++) {
+      const l = new THREE.PointLight(0xffc98a, 0, 18, 2);
+      l.position.set(0, -50, 0);
+      this.group.add(l);
+      this.lightPool.push(l);
+    }
   }
 
   // ---------------------------------------------------------------- traffic signals
@@ -190,13 +198,13 @@ export class StreetDressing {
   _furniture() {
     // Bins and utility boxes at sidewalk corners and along the avenues
     const bins = [[-60, -20], [-60, 12], [60, -30], [60, 16], [-30, 39.2], [12, 39.2], [44, 52.8], [-44, -73], [30, -73], [-36, -14], [36, 22]];
-    this._props('trash_can', bins.map(([x, z], i) => ({ x, z, y: Math.abs(x) > 56 || z > 38 || z < -70 ? 0.15 : 0, rotY: i })), { flatten: { exclude: /rust/ } });
+    this._props('trash_can', bins.map(([x, z], i) => ({ x, z, y: Math.abs(x) > 56 || z > 38 || z < -70 ? 0.15 : 0, rotY: i })), { flatten: { exclude: /rust/ }, maxDistance: 30 });
     const boxes = [[-71.2, -2], [71.2, -40], [-20, 53.4], [36, 53.4], [-62.5, 70], [57.4, 2]];
     this._props('utility_box', boxes.filter((_, i) => i % 2 === 0).map(([x, z], i) => ({ x, z, y: 0.15, rotY: i * Math.PI / 2 })));
     this._props('utility_box_2', boxes.filter((_, i) => i % 2 === 1).map(([x, z], i) => ({ x, z, y: 0.15, rotY: i * Math.PI / 2 + 1 })));
     // Park seating replaces the plain bench volumes
     const benches = this.data.solids.filter((s) => s.mat === 'bench').map((s, i) => ({ x: (s.min[0] + s.max[0]) / 2, z: (s.min[2] + s.max[2]) / 2, rotY: i % 2 ? Math.PI : 0, scale: 0.55 }));
-    this._props('street_seating', benches);
+    this._props('street_seating', benches, { maxDistance: 36 }); // ~25k-triangle scan: near the viewer only
     // Planters along the podium plaza
     const planters = [];
     for (let x = -50; x <= 50; x += 10) if (Math.abs(x) > 6) planters.push({ x, z: -33.5, rotY: 0, scale: 1.6 });
@@ -311,16 +319,7 @@ export class StreetDressing {
     this.night = night;
     this.bulbMat.emissiveIntensity = night ? 6 : 0;
     if (this.carMats) { this.carMats.head.emissiveIntensity = night ? 4 : 0; this.carMats.tail.emissiveIntensity = night ? 3 : 0.2; }
-    if (night && !this.lightPool.length) {
-      for (let i = 0; i < 4; i++) {
-        const l = new THREE.PointLight(0xffc98a, 0, 18, 2);
-        this.group.add(l);
-        this.lightPool.push(l);
-      }
-    } else if (!night && this.lightPool.length) {
-      for (const l of this.lightPool) { this.group.remove(l); l.dispose(); }
-      this.lightPool = [];
-    }
+    if (!night) for (const l of this.lightPool) l.intensity = 0;
   }
 
   update(dt, camPos) {

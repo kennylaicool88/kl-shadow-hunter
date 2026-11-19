@@ -68,15 +68,16 @@ export class EquipmentSystem {
 
   _applyLight() {
     const g = this.game;
-    if (this.light && !this.spot) {
-      // Created on first use only (each scene light costs every pixel).
+    if (!this.spot) {
+      // Created once and kept in the scene at zero intensity: adding a light later changes the light
+      // count and forces every shader in the scene to recompile (seconds of stall on slow drivers).
       this.spot = new THREE.SpotLight(0xfff2dc, 0, 45, 0.42, 0.45, 1.4);
       this.spot.castShadow = false;
       this.spotTarget = new THREE.Object3D();
       g.scene.add(this.spot, this.spotTarget);
       this.spot.target = this.spotTarget;
     }
-    if (this.spot) this.spot.intensity = this.light ? 40 : 0;
+    this.spot.intensity = this.light ? 40 : 0;
   }
 
   // EMP near the player: gear switches off for a while.

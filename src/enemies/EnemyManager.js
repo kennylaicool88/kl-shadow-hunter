@@ -55,6 +55,9 @@ const _right = new THREE.Vector3();
 const _up = new THREE.Vector3();
 const _shot = new THREE.Vector3();
 const _worldUp = new THREE.Vector3(0, 1, 0);
+const _frustum = new THREE.Frustum();
+const _projView = new THREE.Matrix4();
+const _sphere = new THREE.Sphere();
 
 function pickWeighted(list) {
   const total = list.reduce((s, [, w]) => s + w, 0);
@@ -207,9 +210,23 @@ export class EnemyManager {
   }
 
   update(dt) {
+    // Skinned soldiers can't be frustum-culled by three.js (bind-pose bounds), so cull them here with
+    // a generous sphere; off-screen bots skip their animation mixer entirely.
+    const cam = this.game.camera;
+    if (cam) {
+      cam.updateMatrixWorld();
+      _frustum.setFromProjectionMatrix(_projView.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    }
     for (const bot of this.bots) {
       if (bot.alive) bot.ai.update(dt);
-      bot.updateModel(dt, bot.alive ? bot.ai.speed : 0);
+      let onScreen = true;
+      if (cam) {
+        _sphere.center.set(bot.body.pos.x, bot.body.pos.y + 1.0, bot.body.pos.z);
+        _sphere.radius = 1.6;
+        onScreen = _frustum.intersectsSphere(_sphere);
+        bot.camDist = _sphere.center.distanceTo(cam.position);
+      }
+      bot.updateModel(dt, bot.alive ? bot.ai.speed : 0, onScreen);
     }
   }
 

@@ -3,7 +3,7 @@
 // floor-by-floor stainless sunshade rings), and an instanced distant skyline.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { worldBox } from '../render/geometryUtils.js';
+import { worldBox, mergeChunked } from '../render/geometryUtils.js';
 import { FacadeBuilder } from './FacadeBuilder.js';
 
 // Collision-only solids whose visuals are built elsewhere (facades, street dressing, vegetation, cars).
@@ -67,15 +67,18 @@ export class BuildingManager {
       byMat.get(s.mat).push(worldBox(s.min, s.max, BuildingManager.tile(s.mat), { groundY: s.min[1] < -2 ? -8 : 0 }));
     }
     for (const [mat, geos] of byMat) {
-      const merged = mergeGeometries(geos, false);
-      geos.forEach((g) => g.dispose());
-      const mesh = new THREE.Mesh(merged, this._style(mat));
-      mesh.name = `city-${mat}`;
-      mesh.receiveShadow = true;
-      mesh.castShadow = !['asphalt', 'tunnelfloor', 'paving'].includes(mat);
-      mesh.matrixAutoUpdate = false;
-      mesh.updateMatrix();
-      this.group.add(mesh);
+      const style = this._style(mat);
+      // Spatial chunks: three.js frustum-culls each chunk, so looking down a street never draws the
+      // geometry behind the viewer.
+      for (const c of mergeChunked(geos, 48)) {
+        const mesh = new THREE.Mesh(c.geometry, style);
+        mesh.name = `city-${mat}`;
+        mesh.receiveShadow = true;
+        mesh.castShadow = !['asphalt', 'tunnelfloor', 'paving'].includes(mat);
+        mesh.matrixAutoUpdate = false;
+        mesh.updateMatrix();
+        this.group.add(mesh);
+      }
     }
   }
 
@@ -84,8 +87,21 @@ export class BuildingManager {
     const blocks = this.data.solids.filter((s) => s.mat.startsWith('bld-')).map((s) => ({
       x0: s.min[0], z0: s.min[2], x1: s.max[0], z1: s.max[2], y0: s.min[1], h: s.max[1], style: s.mat.slice(4),
     }));
-    for (const m of this.facades.build(blocks, { x: 0, z: 0 })) this.group.add(m);
+    this.facadeDetail = [];
+    for (const m of this.facades.build(blocks, { x: 0, z: 0 })) {
+      this.group.add(m);
+      if (m.userData.detail) this.facadeDetail.push(m);
+    }
     return this.facades.rooftop;
+  }
+
+  // Fine facade detail (mullions, sills, shutters) is only drawn within `distance` of the viewer.
+  updateDetail(camPos, distance) {
+    const d2 = distance * distance;
+    for (const m of this.facadeDetail) {
+      const dx = m.userData.cx - camPos.x, dz = m.userData.cz - camPos.z;
+      m.visible = dx * dx + dz * dz < d2;
+    }
   }
 
   // ---------------------------------------------------------------- Twin Towers

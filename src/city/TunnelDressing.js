@@ -39,14 +39,13 @@ function stainTexture() {
 }
 
 export class TunnelDressing {
-  constructor(group, assets) {
+  // lights: { points: PointLight[4], spot: SpotLight } created by the map at load time (so the scene's
+  // light count never changes when the tunnel dressing arrives later). Dimmed, never removed.
+  constructor(group, assets, lights) {
     this.group = new THREE.Group();
     this.group.name = 'tunnel-dressing';
     group.add(this.group);
-    // Lights live outside the culled group: changing the scene's light count forces shader recompiles,
-    // so they are dimmed instead of removed when the viewer is far away.
-    this.lightGroup = new THREE.Group();
-    group.add(this.lightGroup);
+    this.given = lights;
     this.lights = [];
     this.assets = assets;
     this.beacons = [];
@@ -90,11 +89,10 @@ export class TunnelDressing {
     this.group.add(tubes);
     // Practical point lights (shadowless) every other fitting
     // Light budget: four practical lights cover the corridor and rooms; other fixtures are emissive only.
-    [[-30, 46.5], [6, 46.5], [-45, 56], [21, 58]].map(([x, z]) => ({ x, z })).forEach((l) => {
-      const p = new THREE.PointLight(0xe8f0ff, 16, 22, 2);
-      p.position.set(l.x, -1.6, l.z);
+    [[-30, 46.5], [6, 46.5], [-45, 56], [21, 58]].forEach(([x, z], i) => {
+      const p = this.given.points[i];
+      p.position.set(x, -1.6, z);
       p.userData.on = 10;
-      this.lightGroup.add(p);
       this.lights.push(p);
     });
 
@@ -168,10 +166,9 @@ export class TunnelDressing {
       g.position.set(x, -1.3, z);
       this.group.add(g);
       if (!lit) { this.beacons.push({ g, spot: null }); continue; } // emissive-only beacons
-      const spot = new THREE.SpotLight(0xff9a20, 30, 14, 0.45, 0.6, 2);
+      const spot = this.given.spot;
       spot.position.set(x, -1.3, z);
       spot.userData.on = 30;
-      this.lightGroup.add(spot, spot.target);
       this.lights.push(spot);
       this.beacons.push({ g, spot });
     }

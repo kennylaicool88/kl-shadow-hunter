@@ -41,6 +41,8 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.autoClear = false;
     this.renderer.info.autoReset = false; // counted per frame (post-processing renders several passes)
+    // Skipping the synchronous link-status query lets parallel shader compiles finish off-thread.
+    this.renderer.debug.checkShaderErrors = false;
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0xcbbd9f, 70, 190);
@@ -136,12 +138,24 @@ export class Game {
     ]);
     this.map = new TrainingMap(this.scene, this.mapData, this.presetName(), this.assets);
     this.weapons.setAssets(this.assets);
+    this.weapons.renderer = this.renderer;
     this.enemies.setAssets(this.assets);
     this.surveillance.setLevel('depot');
     this._updateLoadoutSummary();
+    this.menu.setLoading('Compiling shaders…');
+    await this.precompile();
     this.menu.setLoading('');
     this.renderer.setAnimationLoop(() => this.frame());
     return this;
+  }
+
+  // Shader programs are compiled off the main thread (KHR_parallel_shader_compile) so the first
+  // frames after a level loads don't stall; every scene light already exists at this point.
+  async precompile() {
+    try {
+      await this.renderer.compileAsync(this.scene, this.camera);
+      await this.renderer.compileAsync(this.weapons.viewScene, this.weapons.viewCamera);
+    } catch (err) { console.warn('[render] precompile', err.message); }
   }
 
   // ------------------------------------------------------------------ wiring
@@ -378,7 +392,10 @@ export class Game {
       if (id === 'kl') {
         this.menu.setLoading('Loading Kuala Lumpur assets…');
         await MapClass.preload(this.assets);
-        this.map = new MapClass(this.scene, data, { quality: this.presetName(), renderer: this.renderer, timeOfDay: this.settings.timeOfDay, assets: this.assets });
+        this.map = new MapClass(this.scene, data, {
+          quality: this.presetName(), renderer: this.renderer, timeOfDay: this.settings.timeOfDay, assets: this.assets,
+          onReady: () => this.precompile(), // tunnel dressing arrives later: warm its shaders too
+        });
       } else {
         this.map = new TrainingMap(this.scene, data, this.presetName(), this.assets);
       }
@@ -389,6 +406,8 @@ export class Game {
       this.throwables.clear();
       this.levelId = id;
       this.surveillance.setLevel(id);
+      this.menu.setLoading('Compiling shaders…');
+      await this.precompile();
     }
     if (id === 'kl' && !this.mission) this.mission = new MissionMode(this);
     this.menu.setLoading('');

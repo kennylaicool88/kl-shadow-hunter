@@ -34,6 +34,7 @@ def blur_noise(n, scale):
     return (a - a.min()) / (a.max() - a.min() + 1e-9)
 
 def save_img(name, rgb):
+    TEXARR[name] = rgb
     n = rgb.shape[0]
     rgba = np.concatenate([rgb, np.ones((n, n, 1))], axis=2).astype(np.float32)
     img = bpy.data.images.new(name, n, n, alpha=False)
@@ -83,7 +84,13 @@ def tex_molle(color, n=256):
     return c
 
 # ----------------------------------------------------------------------------- materials
-def material(name, img=None, color=(0.5, 0.5, 0.5), rough=0.85, metal=0.0):
+TEXARR = {}   # texture name -> sRGB float array (used to bake the LOD's vertex colours)
+MAT_INFO = {}  # material name -> { 'tex': array or None, 'color': linear rgb }
+
+def srgb_to_lin(c):
+    return tuple(((v + 0.055) / 1.055) ** 2.4 if v > 0.04045 else v / 12.92 for v in c)
+
+def material(name, img=None, color=(0.5, 0.5, 0.5), rough=0.85, metal=0.0, tex=None, vertex_color=False):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
@@ -94,27 +101,41 @@ def material(name, img=None, color=(0.5, 0.5, 0.5), rough=0.85, metal=0.0):
         t = nt.nodes.new('ShaderNodeTexImage')
         t.image = img
         nt.links.new(t.outputs['Color'], bsdf.inputs['Base Color'])
+    elif vertex_color:
+        ca = nt.nodes.new('ShaderNodeVertexColor')
+        ca.layer_name = 'Col'
+        nt.links.new(ca.outputs['Color'], bsdf.inputs['Base Color'])
     else:
         bsdf.inputs['Base Color'].default_value = (*color, 1)
+    MAT_INFO[name] = {'tex': tex, 'color': color}
     return m
+
+# Flat-coloured parts (skin, eyes, soles, belt, buckle, magazines) share ONE material and get their
+# colour from a vertex-colour attribute: fewer draw calls per soldier.
+FLAT = material('Gear_Flat', rough=0.7, vertex_color=True)
+FLAT_COLORS = {}  # key -> linear colour baked into the 'Col' attribute
+
+def flat(key, color, rough=None):
+    FLAT_COLORS[key] = color
+    return FLAT
 
 log('textures')
 M = {
     # "Body*" materials are tinted per team / class by the game (SoldierRig).
-    'shirt': material('Body_Shirt', save_img('shirt', tex_plain((0.29, 0.22, 0.16), grain=0.35))),
-    'pants': material('Body_Pants', save_img('camo', tex_camo())),
-    'vest': material('Gear_Vest', save_img('cordura', tex_molle((0.30, 0.30, 0.19))), rough=0.9),
-    'pouch': material('Gear_Pouch', save_img('pouch', tex_plain((0.33, 0.32, 0.21), grain=0.4)), rough=0.9),
-    'shemagh': material('Gear_Shemagh', save_img('shemagh', tex_shemagh()), rough=0.95),
-    'boots': material('Gear_Boots', save_img('suede', tex_plain((0.60, 0.50, 0.36), grain=0.2, mottle=0.4)), rough=0.95),
-    'sole': material('Gear_Sole', color=(0.02, 0.018, 0.016), rough=0.9),
-    'gloves': material('Gear_Gloves', save_img('glove', tex_plain((0.05, 0.05, 0.05), grain=0.4)), rough=0.7),
-    'belt': material('Gear_Belt', color=(0.045, 0.03, 0.018), rough=0.7),
-    'metal': material('Gear_Metal', color=(0.25, 0.25, 0.24), rough=0.4, metal=1.0),
-    'skin': material('Skin', color=(0.19, 0.11, 0.07), rough=0.6),
-    'eyes': material('Eyes', color=(0.03, 0.025, 0.02), rough=0.2),
-    'magazine': material('Gear_Mag', color=(0.06, 0.06, 0.06), rough=0.5, metal=0.4),
+    'shirt': material('Body_Shirt', save_img('shirt', tex_plain((0.29, 0.22, 0.16), grain=0.35)), tex='shirt'),
+    'pants': material('Body_Pants', save_img('camo', tex_camo()), tex='camo'),
+    'vest': material('Gear_Vest', save_img('cordura', tex_molle((0.30, 0.30, 0.19))), rough=0.9, tex='cordura'),
+    'shemagh': material('Gear_Shemagh', save_img('shemagh', tex_shemagh()), rough=0.95, tex='shemagh'),
+    'boots': material('Gear_Boots', save_img('suede', tex_plain((0.60, 0.50, 0.36), grain=0.2, mottle=0.4)), rough=0.95, tex='suede'),
+    'gloves': material('Gear_Gloves', save_img('glove', tex_plain((0.05, 0.05, 0.05), grain=0.4)), rough=0.7, tex='glove'),
+    'sole': flat('sole', (0.02, 0.018, 0.016)),
+    'belt': flat('belt', (0.045, 0.03, 0.018)),
+    'metal': flat('metal', (0.25, 0.25, 0.24)),
+    'skin': flat('skin', (0.19, 0.11, 0.07)),
+    'eyes': flat('eyes', (0.03, 0.025, 0.02)),
+    'magazine': flat('magazine', (0.06, 0.06, 0.06)),
 }
+M['pouch'] = M['vest']  # pouches share the vest's cordura material (one draw call)
 
 # ----------------------------------------------------------------------------- geometry helpers
 parts = []
@@ -131,6 +152,11 @@ def finish(obj, mat, uv_scale=0.25, smooth=True):
     box_uv(obj, uv_scale)
     for p in obj.data.polygons:
         p.use_smooth = smooth
+    # Vertex colour: the flat material's colour, white elsewhere (textured parts ignore it)
+    col = obj.data.color_attributes.new('Col', 'FLOAT_COLOR', 'POINT')
+    c = FLAT_COLORS.get(mat, (1, 1, 1))
+    for i in range(len(obj.data.vertices)):
+        col.data[i].color = (c[0], c[1], c[2], 1.0)
     parts.append(obj)
     return obj
 
@@ -418,6 +444,45 @@ for v in mesh.data.vertices:
 
 mesh.parent = arm
 mod = mesh.modifiers.new('Armature', 'ARMATURE'); mod.object = arm
+
+# Distant LOD: a decimated copy that shares the skeleton (vertex groups survive decimation).
+bpy.ops.object.select_all(action='DESELECT')
+mesh.select_set(True); bpy.context.view_layer.objects.active = mesh
+bpy.ops.object.duplicate()
+lod = bpy.context.active_object
+lod.name = 'Soldier_LOD'
+for m in list(lod.modifiers): lod.modifiers.remove(m)
+dec = lod.modifiers.new('Dec', 'DECIMATE'); dec.ratio = 0.22
+bpy.context.view_layer.objects.active = lod
+bpy.ops.object.modifier_apply(modifier='Dec')
+lmod = lod.modifiers.new('Armature', 'ARMATURE'); lmod.object = arm
+lod.parent = arm
+# Bake every texture into per-corner vertex colours so the LOD is a single untextured draw call.
+lme = lod.data
+uvl = lme.uv_layers['UVMap'].data
+base_col = lme.color_attributes['Col'].data
+lcol = lme.color_attributes.new('LodCol', 'FLOAT_COLOR', 'CORNER')
+for p in lme.polygons:
+    info = MAT_INFO[lme.materials[p.material_index].name]
+    arr = TEXARR.get(info['tex']) if info['tex'] else None
+    for li in p.loop_indices:
+        if arr is not None:
+            u, v = uvl[li].uv
+            n = arr.shape[0]
+            x = int((u % 1.0) * n) % n; y = int((1.0 - (v % 1.0)) * n) % n
+            c = srgb_to_lin(tuple(float(q) for q in arr[y, x]))
+        else:
+            vc = base_col[lme.loops[li].vertex_index].color
+            c = (vc[0], vc[1], vc[2])
+        lcol.data[li].color = (c[0], c[1], c[2], 1.0)
+lme.color_attributes.active_color = lcol
+lme.color_attributes.remove(lme.color_attributes['Col'])
+lod_mat = material('Body_LOD', rough=0.85, vertex_color=True)
+lod_mat.node_tree.nodes['Color Attribute'].layer_name = 'LodCol'
+lme.materials.clear()
+lme.materials.append(lod_mat)
+for p in lme.polygons: p.material_index = 0
+log('lod tris', sum(len(p.vertices) - 2 for p in lme.polygons))
 
 # ----------------------------------------------------------------------------- animation (world-axis rotations converted into each bone's rest frame)
 log('animation')

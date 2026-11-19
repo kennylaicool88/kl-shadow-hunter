@@ -1,7 +1,7 @@
 // Headless browser smoke test: starts Vite, opens the game in Chrome/Edge, plays it through
 // the debug hooks, and fails on any JavaScript error.
 // Usage: npm run smoke [-- --shots <dir>]
-import { createServer } from 'vite';
+import { createServer, preview } from 'vite';
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -29,8 +29,12 @@ if (!executablePath) {
 }
 
 const PORT = 5179;
-const server = await createServer({ server: { port: PORT, strictPort: true, open: false }, logLevel: 'error' });
-await server.listen();
+// --dist: test the production build in dist/ (vite preview) so source edits during the run can't interfere.
+const useDist = process.argv.includes('--dist');
+const server = useDist
+  ? await preview({ preview: { port: PORT, strictPort: true, open: false }, logLevel: 'error' })
+  : await createServer({ server: { port: PORT, strictPort: true, open: false }, logLevel: 'error' });
+if (!useDist) await server.listen();
 
 const browser = await puppeteer.launch({
   executablePath,

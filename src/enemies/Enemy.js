@@ -200,13 +200,16 @@ export class Enemy {
     return out;
   }
 
-  updateModel(dt, speed) {
+  updateModel(dt, speed, onScreen = true) {
     if (this.rig) {
-      if (!this.alive) { this.deathTime += dt; if (this.deathTime > 20) this.model.visible = false; }
+      if (!this.alive) { this.deathTime += dt; if (this.deathTime > 20) { this.model.visible = false; return; } }
       this.flinch = Math.max(0, (this.flinch || 0) - dt);
+      // Off-screen: keep the root placed (shadows, audio) but skip skinning/IK work.
+      this.model.visible = onScreen;
+      if (!onScreen) { this.rig.place(this.yaw, this.body.pos, dt); return; }
       this.rig.update(dt, {
         speed, aimPitch: this.aimPitch, flinch: this.flinch, alive: this.alive, deathTime: this.deathTime,
-        reloading: this.weapon.reloading, yaw: this.yaw, pos: this.body.pos,
+        reloading: this.weapon.reloading, yaw: this.yaw, pos: this.body.pos, camDist: this.camDist,
       });
       return;
     }

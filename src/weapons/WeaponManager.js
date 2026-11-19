@@ -215,6 +215,30 @@ export class WeaponManager {
     this.slots.equipment = this.heldList.length ? new GearItem('equipment') : null;
     this.throwState = null;
     this.equip(this.slots.primary ? 'primary' : 'secondary', true);
+    this._prebuildViewModels();
+  }
+
+  // Builds the viewmodels of every carried item now (hidden) so switching never pays for model
+  // construction or shader compilation mid-fight.
+  _prebuildViewModels() {
+    const saved = { current: this.current, grenadeType: this.grenadeType, heldIndex: this.heldIndex };
+    const build = () => {
+      const key = this._modelKey();
+      if (this.models[key]) return;
+      let m;
+      if (this.current === 'grenade') m = buildGearView('grenade', this.grenadeType, { grenade: buildGrenadeModel, equipment: buildEquipmentModel });
+      else if (this.current === 'equipment') m = buildGearView('equipment', this.heldId, { grenade: buildGrenadeModel, equipment: buildEquipmentModel });
+      else m = buildViewModel(this.weapon.id, this.weapon.attachments);
+      m.traverse((o) => { if (o.isMesh && /glow_amber/.test(o.name)) { o.material = o.material.clone(); (m.userData.vents = m.userData.vents || []).push(o.material); } });
+      m.visible = false;
+      this.models[key] = m;
+      this.viewRoot.add(m);
+    };
+    for (const s of ['primary', 'secondary', 'melee']) if (this.slots[s]) { this.current = s; build(); }
+    if (this.slots.grenade) { this.current = 'grenade'; for (const t of Object.keys(this.grenades)) { this.grenadeType = t; build(); } }
+    if (this.slots.equipment) { this.current = 'equipment'; this.heldList.forEach((_, i) => { this.heldIndex = i; build(); }); }
+    Object.assign(this, saved);
+    if (this.renderer && this.renderer.compileAsync) this.renderer.compileAsync(this.viewScene, this.viewCamera).catch(() => {});
   }
 
   // Re-issue grenades and equipment from a loadout without touching the guns.
@@ -336,6 +360,8 @@ export class WeaponManager {
       m.traverse((o) => { if (o.isMesh && /glow_amber/.test(o.name)) { o.material = o.material.clone(); (m.userData.vents = m.userData.vents || []).push(o.material); } });
       this.models[key] = m;
       this.viewRoot.add(m);
+      // New viewmodel materials: compile their shaders off-thread rather than on the first draw.
+      if (this.renderer && this.renderer.compileAsync) this.renderer.compileAsync(this.viewScene, this.viewCamera).catch(() => {});
     }
     const model = this.models[key];
     model.visible = true;

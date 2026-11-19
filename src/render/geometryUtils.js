@@ -1,5 +1,6 @@
 // Geometry helpers shared by the level builders.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
  * Box from an AABB with world-projected UVs (texture density independent of box size) and a baked
@@ -30,6 +31,30 @@ export function worldBox(min, max, tile = 4, opts = {}) {
   g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   g.clearGroups();
   return g;
+}
+
+/**
+ * Merges geometries into spatial chunks (by bounding-box centre) so three.js can frustum-cull each
+ * chunk separately instead of drawing one giant merged mesh. Returns [{ geometry, cx, cz }].
+ */
+export function mergeChunked(geos, chunk = 48) {
+  const buckets = new Map();
+  for (const g of geos) {
+    g.computeBoundingBox();
+    const b = g.boundingBox;
+    const cx = Math.floor((b.min.x + b.max.x) / 2 / chunk), cz = Math.floor((b.min.z + b.max.z) / 2 / chunk);
+    const k = `${cx},${cz}`;
+    if (!buckets.has(k)) buckets.set(k, { cx: (cx + 0.5) * chunk, cz: (cz + 0.5) * chunk, list: [] });
+    buckets.get(k).list.push(g);
+  }
+  const out = [];
+  for (const b of buckets.values()) {
+    const merged = b.list.length === 1 ? b.list[0] : mergeGeometries(b.list, false);
+    if (b.list.length > 1) b.list.forEach((g) => g.dispose());
+    merged.computeBoundingSphere();
+    out.push({ geometry: merged, cx: b.cx, cz: b.cz });
+  }
+  return out;
 }
 
 // Adds a uniform vertex-colour attribute (so geometries can merge with worldBox output).

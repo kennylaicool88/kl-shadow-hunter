@@ -147,6 +147,11 @@ export function buildWeaponModel(id, { attachments = null, lod = 0 } = {}) {
     const l = new THREE.LOD();
     l.addLevel(hi, 0);
     l.addLevel(lo, 6);
+    // Beyond 40 m a gun is a few pixels: a dark stick stands in for it.
+    const far = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, Math.max(0.3, -((hi.userData.points && hi.userData.points.muzzle && hi.userData.points.muzzle.z) || -0.6))), material('steel_dark'));
+    far.position.z = (hi.userData.points && hi.userData.points.muzzle ? hi.userData.points.muzzle.z : -0.6) / 2;
+    far.castShadow = false;
+    l.addLevel(far, 40);
     // Small third-person weapon parts don't need to cast shadows (saves a shadow pass per gun mesh).
     for (const lv of [hi, lo]) lv.traverse((o) => { if (o.isMesh) o.castShadow = false; });
     l.userData = hi.userData; // muzzle/points/anchors refer to the detailed level (matrices update when hidden)
@@ -280,6 +285,23 @@ export function buildHand(kind = 'grip', r = 0.016, angle = 0.35) {
 }
 
 // ================================================================== first-person view model
+// The viewmodel scene has different lights from the world, and three.js keys shader programs by the
+// light set – a material drawn in both scenes would be recompiled twice every frame. The viewmodel
+// therefore uses its own clones of every material (shared across all viewmodels).
+const viewMats = new Map();
+function toViewMaterials(root) {
+  root.traverse((o) => {
+    if (!o.isMesh && !o.isSprite) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const out = mats.map((m) => {
+      if (!viewMats.has(m)) { const c = m.clone(); c.name = `${m.name}:view`; viewMats.set(m, c); }
+      return viewMats.get(m);
+    });
+    o.material = Array.isArray(o.material) ? out : out[0];
+  });
+  return root;
+}
+
 const LAYOUT = {
   long: { scale: 0.5, hand: [0.13, -0.175, -0.29] },
   pistol: { scale: 0.62, hand: [0.115, -0.163, -0.285] },
@@ -335,7 +357,7 @@ export function buildViewModel(id, attachments = null) {
   const adsPos = new THREE.Vector3(-sightX * s, -sightY * s, -eyeZ * s);
   root.userData = { ...ud, weapon, basePos, adsPos, kind, scale: s, cfgId: id };
   root.position.copy(basePos);
-  return root;
+  return toViewMaterials(root);
 }
 
 // Deep Strike uplink tablet (mission designator)
@@ -368,7 +390,7 @@ function buildUplinkView(root) {
   root.add(g);
   root.userData = { weapon: g, muzzle, basePos: new THREE.Vector3(0.1, -0.16, -0.36), adsPos: new THREE.Vector3(0.1, -0.16, -0.36), kind: 'uplink', scale: 0.55, points: {}, parts: {} };
   root.position.copy(root.userData.basePos);
-  return root;
+  return toViewMaterials(root);
 }
 
 // ================================================================== gear view models (grenades, held equipment)
@@ -404,6 +426,10 @@ export function buildGearView(kind, id, models) {
   const pin = item.userData.parts && item.userData.parts.pin;
   root.userData = { weapon: g, item, pin, screen: item.userData.screen || null, basePos: new THREE.Vector3(...L.pos), adsPos: new THREE.Vector3(...L.pos), kind, gear: true, scale: L.scale, points: {}, parts: {} };
   root.position.copy(root.userData.basePos);
+  // Device screens are canvas textures owned by the equipment system: keep those materials unique.
+  const screen = item.userData.screen;
+  toViewMaterials(root);
+  if (screen) screen.material = viewMats.get(screen.material) || screen.material;
   return root;
 }
 

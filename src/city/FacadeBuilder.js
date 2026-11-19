@@ -3,8 +3,7 @@
 // arcades, podiums, canopies, parapets, setbacks and rooftop plant). Collision is unchanged.
 // All geometry is merged per material, so the whole skyline costs ~a dozen draw calls.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { worldBox } from '../render/geometryUtils.js';
+import { worldBox, mergeChunked } from '../render/geometryUtils.js';
 
 const FLOOR = 3.8; // storey height (m)
 const BAY = 1.5; // curtain-wall module width (m)
@@ -83,20 +82,22 @@ export class FacadeBuilder {
     for (const k of ['glassBlue', 'glassGreen', 'glassSilver', 'glassBronze', 'glassDark']) this.mats[k].userData.nightGlass = true;
   }
 
-  _push(key, g) {
-    if (!this.geo.has(key)) this.geo.set(key, []);
-    this.geo.get(key).push(g);
+  // detail: small trim that is only drawn near the viewer and never casts shadows.
+  _push(key, g, detail = false) {
+    const k = detail ? `${key}#detail` : key;
+    if (!this.geo.has(k)) this.geo.set(k, []);
+    this.geo.get(k).push(g);
   }
 
   // Box defined relative to a face: along [u0,u1], vertical [y0,y1], out of plane [d0,d1] (+ = outward).
-  _faceBox(key, f, u0, u1, y0, y1, d0, d1, tile = 4, tint) {
+  _faceBox(key, f, u0, u1, y0, y1, d0, d1, tile = 4, tint, detail = false) {
     const ax = f.ox + f.dx * u0, az = f.oz + f.dz * u0;
     const bx = f.ox + f.dx * u1, bz = f.oz + f.dz * u1;
     const xs = [ax + f.nx * d0, ax + f.nx * d1, bx + f.nx * d0, bx + f.nx * d1];
     const zs = [az + f.nz * d0, az + f.nz * d1, bz + f.nz * d0, bz + f.nz * d1];
     const min = [Math.min(...xs), y0, Math.min(...zs)], max = [Math.max(...xs), y1, Math.max(...zs)];
     if (max[0] - min[0] < 1e-3 || max[2] - min[2] < 1e-3 || y1 - y0 < 1e-3) return;
-    this._push(key, worldBox(min, max, tile, { tint }));
+    this._push(key, worldBox(min, max, tile, { tint }), detail);
   }
 
   static faces(r) {
@@ -203,13 +204,13 @@ export class FacadeBuilder {
     const ins = 0.35;
     this._glassCore(glass, r.x0 + ins, r.z0 + ins, r.x1 - ins, r.z1 - ins, y0, y1, (seed * 0.137) % 1);
     for (const f of FacadeBuilder.faces(r)) {
-      // Vertical mullions
-      for (let u = BAY; u < f.L - 0.4; u += BAY) this._faceBox('frame', f, u - 0.045, u + 0.045, y0, y1, -ins, 0.12, 2);
+      // Vertical mullions (detail: drawn near the viewer only)
+      for (let u = BAY; u < f.L - 0.4; u += BAY) this._faceBox('frame', f, u - 0.045, u + 0.045, y0, y1, -ins, 0.12, 2, undefined, true);
       // Spandrels / transoms every floor, a deeper band every fifth floor
       let k = 0;
       for (let y = y0; y < y1 - 0.5; y += FLOOR, k++) {
         const deep = k % 5 === 0;
-        this._faceBox(deep ? 'darkFrame' : 'frame', f, 0, f.L, y, y + (deep ? 0.9 : 0.22), -ins, deep ? 0.2 : 0.07, 2);
+        this._faceBox(deep ? 'darkFrame' : 'frame', f, 0, f.L, y, y + (deep ? 0.9 : 0.22), -ins, deep ? 0.2 : 0.07, 2, undefined, !deep);
       }
       // Corner columns
       this._faceBox('frame', f, 0, 0.55, y0, y1, -ins, 0.25, 2);
@@ -231,7 +232,7 @@ export class FacadeBuilder {
       for (let u = 0; u <= f.L + 0.01; u += pier) this._faceBox(clad, f, Math.max(0, u - 0.38), Math.min(f.L, u + 0.38), yb, b.h, -ins, 0.02, 3);
       for (let y = yb; y < b.h - 0.5; y += FLOOR) {
         this._faceBox(clad, f, 0, f.L, y, y + 1.3, -ins, 0, 3); // spandrel
-        this._faceBox('concrete', f, 0, f.L, y + 1.3, y + 1.42, -ins, 0.14, 2); // sill ledge
+        this._faceBox('concrete', f, 0, f.L, y + 1.3, y + 1.42, -ins, 0.14, 2, undefined, true); // sill ledge (detail)
       }
       this._faceBox('concrete', f, 0, f.L, b.h - 1.0, b.h, -ins, 0.45, 2); // cornice
     }
@@ -271,11 +272,11 @@ export class FacadeBuilder {
           for (const c of [0.28, 0.72]) {
             const wu = u0 + w * c;
             this._faceBox('glassDark', f, wu - 0.55, wu + 0.55, y + 0.9, y + fh - 0.7, -0.32, -0.25, 1);
-            this._faceBox('wood', f, wu - 0.7, wu + 0.7, y + 0.8, y + 0.9, -0.3, 0.12, 2); // sill
-            this._faceBox('wood', f, wu - 1.15, wu - 0.6, y + 0.9, y + fh - 0.7, -0.3, 0.06, 2, [0.6, 1.2, 0.9]); // shutter
-            this._faceBox('wood', f, wu + 0.6, wu + 1.15, y + 0.9, y + fh - 0.7, -0.3, 0.06, 2, [0.6, 1.2, 0.9]);
+            this._faceBox('wood', f, wu - 0.7, wu + 0.7, y + 0.8, y + 0.9, -0.3, 0.12, 2, undefined, true); // sill
+            this._faceBox('wood', f, wu - 1.15, wu - 0.6, y + 0.9, y + fh - 0.7, -0.3, 0.06, 2, [0.6, 1.2, 0.9], true); // shutter
+            this._faceBox('wood', f, wu + 0.6, wu + 1.15, y + 0.9, y + fh - 0.7, -0.3, 0.06, 2, [0.6, 1.2, 0.9], true);
           }
-          this._faceBox('plaster', f, u0, u1, y - 0.18, y + 0.12, -0.3, 0.22, 2, [0.98, 0.97, 0.94]); // cornice
+          this._faceBox('plaster', f, u0, u1, y - 0.18, y + 0.12, -0.3, 0.22, 2, [0.98, 0.97, 0.94], true); // cornice
         }
         this._faceBox('plaster', f, u0 + 0.2, u1 - 0.2, b.h, b.h + 0.9, -0.3, 0.05, 2, tint); // stepped parapet
       }
@@ -285,16 +286,20 @@ export class FacadeBuilder {
 
   _finish() {
     const meshes = [];
-    for (const [key, geos] of this.geo) {
-      const merged = mergeGeometries(geos, false);
-      geos.forEach((g) => g.dispose());
-      const mesh = new THREE.Mesh(merged, this.mats[key]);
-      mesh.name = `facade-${key}`;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.matrixAutoUpdate = false;
-      mesh.updateMatrix();
-      meshes.push(mesh);
+    for (const [k, geos] of this.geo) {
+      const [key, flag] = k.split('#');
+      const detail = flag === 'detail';
+      // Chunked so the GPU only draws facades in view; detail chunks are distance-gated by the map.
+      for (const c of mergeChunked(geos, 48)) {
+        const mesh = new THREE.Mesh(c.geometry, this.mats[key]);
+        mesh.name = `facade-${key}${detail ? '-detail' : ''}`;
+        mesh.castShadow = !detail;
+        mesh.receiveShadow = true;
+        mesh.matrixAutoUpdate = false;
+        mesh.updateMatrix();
+        mesh.userData = { detail, cx: c.cx, cz: c.cz };
+        meshes.push(mesh);
+      }
     }
     this.geo.clear();
     return meshes;

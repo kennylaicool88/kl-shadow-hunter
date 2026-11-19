@@ -50,15 +50,20 @@ export class SurveillanceSystem {
     root.add(head);
     const assets = this.game.assets;
     let model = assets && assets.hasModel('security_camera') ? assets.model('security_camera') : null;
+    // Simple housing used as the far LOD (and as the fallback when the scan is unavailable).
+    const proxy = new THREE.Group();
+    proxy.add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.3).translate(0, 0, -0.1), material('white')));
+    proxy.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.02, 12).rotateX(Math.PI / 2).translate(0, 0, -0.26), material('lens')));
     if (model) {
-      model.scale.setScalar(1.0);
+      // The 13.5k-triangle scan only within 30 m; it never casts shadows (tiny object, high cost).
       model.rotation.y = Math.PI; // lens toward -Z of the head
       model.position.set(0, -0.12, 0.1);
-      head.add(model);
-    } else {
-      head.add(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.3).translate(0, 0, -0.1), material('white')));
-      head.add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.02, 12).rotateX(Math.PI / 2).translate(0, 0, -0.26), material('lens')));
-    }
+      model.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+      const lod = new THREE.LOD();
+      lod.addLevel(model, 0);
+      lod.addLevel(proxy, 30);
+      head.add(lod);
+    } else head.add(proxy);
     if (pole) root.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, pos.y, 10).translate(0, -pos.y / 2, 0), material('steel_dark')));
     const led = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), material('glow_red').clone());
     led.position.set(0.04, 0.02, -0.2);

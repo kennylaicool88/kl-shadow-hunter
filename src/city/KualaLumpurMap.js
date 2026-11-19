@@ -37,7 +37,7 @@ export class KualaLumpurMap {
     ]);
   }
 
-  constructor(scene, data, { quality = 'high', renderer, timeOfDay = 'day', assets } = {}) {
+  constructor(scene, data, { quality = 'high', renderer, timeOfDay = 'day', assets, onReady = null } = {}) {
     this.scene = scene;
     this.data = data;
     this.qName = quality;
@@ -79,10 +79,12 @@ export class KualaLumpurMap {
 
     // Underground zone: load and build the tunnel dressing after the city is on screen.
     this.tunnel = null;
+    this.onReady = onReady;
     assets.loadModels(TUNNEL_MODELS).then(() => {
       if (this.disposed) return;
-      this.tunnel = new TunnelDressing(this.group, assets);
+      this.tunnel = new TunnelDressing(this.group, assets, this.tunnelLights);
       this.tunnel.build();
+      if (this.onReady) this.onReady();
     });
   }
 
@@ -263,7 +265,8 @@ export class KualaLumpurMap {
     sun.castShadow = this.q.shadows;
     sun.shadow.mapSize.set(this.q.shadowSize, this.q.shadowSize);
     const sc = sun.shadow.camera;
-    sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70; sc.near = 1; sc.far = 420;
+    const R = this.q.shadowRange || 70;
+    sc.left = -R; sc.right = R; sc.top = R; sc.bottom = -R; sc.near = 1; sc.far = 420;
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.06;
     sun.shadow.radius = 3;
@@ -275,6 +278,18 @@ export class KualaLumpurMap {
       l.position.set(x, y, z);
       this.group.add(l);
     }
+    // Tunnel lights are created now (the dressing arrives later) so the light count never changes.
+    const points = [];
+    for (let i = 0; i < 4; i++) {
+      const p = new THREE.PointLight(0xe8f0ff, 0, 22, 2);
+      p.position.set(0, -60, 0);
+      this.group.add(p);
+      points.push(p);
+    }
+    const spot = new THREE.SpotLight(0xff9a20, 0, 14, 0.45, 0.6, 2);
+    spot.position.set(0, -60, 0);
+    this.group.add(spot, spot.target);
+    this.tunnelLights = { points, spot };
   }
 
   setTimeOfDay(tod) {
@@ -361,6 +376,12 @@ export class KualaLumpurMap {
     const c = camera.position;
     this.dressing.update(dt, c);
     if (this.tunnel) this.tunnel.update(dt, c);
+    // Facade trim (mullions, sills, shutters) is distance-gated per chunk; 4 Hz is plenty.
+    this._detailTimer = (this._detailTimer || 0) - dt;
+    if (this._detailTimer <= 0) {
+      this._detailTimer = 0.25;
+      this.buildings.updateDetail(c, (this.q.facadeDetail || 90) + Math.max(0, c.y - 20) * 2);
+    }
     // Sun/shadow camera follows the viewer so shadows stay sharp across the large map.
     const ground = Math.max(-10, Math.min(30, c.y));
     this.sun.target.position.set(c.x, ground, c.z);
@@ -396,6 +417,9 @@ export class KualaLumpurMap {
       this.sun.shadow.mapSize.set(q.shadowSize, q.shadowSize);
       if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
     }
+    const sc = this.sun.shadow.camera, R = q.shadowRange || 70;
+    sc.left = -R; sc.right = R; sc.top = R; sc.bottom = -R;
+    sc.updateProjectionMatrix();
   }
 
   dispose() {

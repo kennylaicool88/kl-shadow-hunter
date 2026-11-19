@@ -72,15 +72,33 @@ export class SoldierRig {
     model.scale.multiplyScalar(s);
     model.position.y = -box.min.y * s;
     // This rig already faces -Z (the game's forward axis) – verified in gameplay screenshots.
+    // Two skinned meshes share the skeleton: the full model and a decimated distant LOD.
+    this.hiMeshes = [];
+    this.loMeshes = [];
     model.traverse((o) => {
       if (o.isSkinnedMesh || o.isMesh) {
         o.castShadow = true;
         o.receiveShadow = true;
-        o.frustumCulled = false; // skinned bounds come from the bind pose
+        o.frustumCulled = false; // skinned bounds come from the bind pose (EnemyManager culls the whole bot)
         o.material = o.material.clone();
         if (/Body/i.test(o.material.name)) o.material.color.multiply(team === 'B' ? new THREE.Color(CLASS_LOOK[cls].tint) : TINT[team]);
+        let isLod = false;
+        for (let p = o; p && p !== model; p = p.parent) if (/LOD/i.test(p.name)) isLod = true;
+        (isLod ? this.loMeshes : this.hiMeshes).push(o);
       }
     });
+    this.far = null;
+    this.setLod(false);
+    // SkeletonUtils.clone gives every skinned mesh its own Skeleton (one bone texture upload each,
+    // per frame). All parts of the soldier are skinned to the same bones, so share one skeleton.
+    const skinned = [...this.hiMeshes, ...this.loMeshes].filter((o) => o.isSkinnedMesh);
+    if (skinned.length > 1) {
+      const sk = skinned[0].skeleton;
+      for (let i = 1; i < skinned.length; i++) {
+        const m = skinned[i];
+        if (m.skeleton.bones.length === sk.bones.length) m.bind(sk, m.bindMatrix);
+      }
+    }
     this.body.add(model);
     this.model = model;
     const bone = (n) => { let r = null; model.traverse((o) => { if (o.isBone && o.name.replace(/[^A-Za-z0-9]/g, '').endsWith(n)) r = r || o; }); return r; };
@@ -123,6 +141,7 @@ export class SoldierRig {
       mesh.scale.multiplyScalar(s / ws.x);
       mesh.position.set(x / ws.x, y / ws.y, z / ws.z);
       mesh.userData.shared = true;
+      (this.gear = this.gear || []).push(mesh);
       mesh.castShadow = false; // gear is small; the body already casts the shadow
       bone.add(mesh);
     };
@@ -169,8 +188,26 @@ export class SoldierRig {
     this.kick = 1;
   }
 
-  update(dt, { speed, aimPitch, flinch, alive, deathTime, reloading, yaw, pos }) {
+  // Switches between the full mesh and the decimated LOD (no-op when the GLB has no LOD).
+  setLod(far) {
+    if (this.far === far || !this.loMeshes.length) return;
+    this.far = far;
+    for (const m of this.hiMeshes) m.visible = !far;
+    for (const m of this.loMeshes) { m.visible = far; m.castShadow = false; } // far bots: no shadow pass
+    for (const g of this.gear || []) g.visible = !far; // helmets / vests are not visible detail at distance
+  }
+
+  // Cheap placement while off-screen (the mixer still advances a little so the pose isn't frozen on return).
+  place(yaw, pos, dt) {
     this.root.position.set(pos.x, pos.y, pos.z);
+    this.root.rotation.set(0, yaw, 0);
+    this.skipped = (this.skipped || 0) + dt;
+    if (this.skipped > 0.5) { this.mixer.update(this.skipped); this.skipped = 0; }
+  }
+
+  update(dt, { speed, aimPitch, flinch, alive, deathTime, reloading, yaw, pos, camDist = 0 }) {
+    this.root.position.set(pos.x, pos.y, pos.z);
+    this.setLod(camDist > 24);
     if (!alive) {
       // Death: freeze the animation and fall backwards.
       if (!this.dead) { this.dead = true; this.mixer.timeScale = 0; }
@@ -190,6 +227,8 @@ export class SoldierRig {
     this.mixer.update(dt);
     this.model.updateMatrixWorld(true);
     if (!this.ikReady) return;
+    // Beyond ~45 m the hand IK isn't visible: keep the mount aimed, skip the solver.
+    if (camDist > 45) { this.mount.rotation.set(aimPitch, 0, 0); return; }
     // Upper-body aim layer
     this.kick = Math.max(0, this.kick - dt * 9);
     const lean = -aimPitch * 0.45 - flinch * 1.4;

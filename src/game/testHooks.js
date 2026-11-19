@@ -256,6 +256,7 @@ export function installTestHooks(game) {
       game.weapons.equip(v.slot || 'primary');
       game.weapons.switchTimer = 0;
       hooks.teleport(v.at[0], v.at[1], v.at[2], v.yaw, v.pitch || 0);
+      game.enemies.update(0); // settle bot LOD / visibility for the new camera position
       if (v.zoom) game.weapons.weapon.zoomIndex = v.zoom;
       game._updateHud(0);
       return v.name;
@@ -529,6 +530,8 @@ function installMissionHooks(game, hooks, step) {
       default: break;
     }
     game.weapons.switchTimer = 0; // don't freeze mid weapon-draw animation
+    game._updateCamera();
+    game.enemies.update(0); // settle bot LOD / visibility for the new camera position
     game.hud.clearMessage();
     game._updateHud(0);
     game.testFreeze = true;

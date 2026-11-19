@@ -1,6 +1,7 @@
 import './styles.css';
 import * as THREE from 'three';
 import { Game } from './game/Game.js';
+window.__THREE = THREE; // debugging / probes
 import { loadSettings } from './game/Settings.js';
 
 function showError(message) {

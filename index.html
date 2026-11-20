@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KL Shadow Hunter</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23c9a227' stroke-width='3'/%3E%3Cpath d='M16 2v9M16 21v9M2 16h9M21 16h9' stroke='%23c9a227' stroke-width='3'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="/kl-shadow-hunter/assets/index-DHS5PwLc.js"></script>
+    <link rel="stylesheet" crossorigin href="/kl-shadow-hunter/assets/index-BJAdoAPM.css">
+  </head>
+  <body>
+    <div id="game-root">
+      <canvas id="game-canvas"></canvas>
+
+      <!-- ================= HUD ================= -->
+      <div id="hud" class="hidden">
+        <div id="crosshair">
+          <div class="ch ch-top"></div>
+          <div class="ch ch-bottom"></div>
+          <div class="ch ch-left"></div>
+          <div class="ch ch-right"></div>
+          <div class="ch-dot"></div>
+        </div>
+        <div id="hitmarker"><span></span><span></span><span></span><span></span></div>
+        <div id="scope-overlay" class="hidden">
+          <div class="scope-ring"></div>
+          <div class="scope-line scope-h"></div>
+          <div class="scope-line scope-v"></div>
+          <div class="scope-mildots"></div>
+          <div class="scope-chevron"></div>
+          <div class="scope-dot"></div>
+          <div class="scope-bino"><i></i><i></i></div>
+        </div>
+        <div id="flashbang"></div>
+        <div id="vision-label" class="hidden"></div>
+        <div id="hud-markers"></div>
+        <div id="range-readout" class="hidden"></div>
+        <div id="weapon-wheel" class="hidden"></div>
+        <div id="damage-flash"></div>
+        <div id="damage-indicators"></div>
+
+        <div id="hud-top">
+          <div id="score-a" class="team-score team-a">0</div>
+          <div id="round-timer">2:00</div>
+          <div id="score-b" class="team-score team-b">0</div>
+        </div>
+        <div id="round-info">Round 1</div>
+        <div id="alive-info"></div>
+        <div id="center-message"></div>
+        <div id="sub-message"></div>
+        <div id="killfeed"></div>
+
+        <div id="hud-bottom-left">
+          <div class="hud-stat"><span class="hud-icon">✚</span><span id="hud-health">100</span></div>
+          <div class="hud-stat"><span class="hud-icon">◈</span><span id="hud-armor">0</span></div>
+        </div>
+        <div id="hud-kills">Kills <span id="hud-kill-count">0</span></div>
+        <div id="hud-bottom-right">
+          <div class="wp-head">
+            <img id="hud-weapon-icon" alt="" />
+            <div class="wp-meta"><div id="hud-weapon-name">Rifle</div><div id="hud-firemode"></div></div>
+          </div>
+          <div class="hud-ammo"><span id="hud-mag">30</span><span class="ammo-sep">/</span><span id="hud-reserve">90</span></div>
+          <div id="reload-bar"><div id="reload-fill"></div></div>
+          <div id="hud-heat" class="hidden"><div id="hud-heat-fill"></div></div>
+          <div id="hud-grenades"></div>
+        </div>
+        <div id="hud-equipment"></div>
+        <div id="hud-objective"></div>
+        <div id="hud-detection"></div>
+        <div id="weapon-slots"></div>
+        <div id="pickup-hint" class="hidden"></div>
+        <div id="fps-counter" class="hidden">0 FPS</div>
+
+        <div id="buy-menu" class="hidden">
+          <div class="panel-title">Quick buy <span class="muted">(buy time)</span></div>
+          <div class="buy-row"><b>1</b> AR-7 Carbine</div>
+          <div class="buy-row"><b>2</b> M-12 Breacher</div>
+          <div class="buy-row"><b>3</b> LR-50 Marksman</div>
+          <div class="buy-row"><b>4</b> Kevlar + Helmet <span class="muted">100 armor</span></div>
+          <div class="buy-row"><b>5</b> Refill ammo &amp; grenades</div>
+          <div class="buy-row"><b>6</b> Open the full armory (all weapons, attachments, gear)</div>
+          <div class="muted small">Press B to close</div>
+        </div>
+
+        <div id="scoreboard" class="hidden">
+          <div class="panel-title">Scoreboard <span id="sb-mode" class="muted"></span></div>
+          <div class="sb-columns">
+            <div class="sb-team">
+              <div class="sb-head team-a">Alpha <span id="sb-score-a"></span></div>
+              <table><thead><tr><th>Name</th><th>K</th><th>D</th><th></th></tr></thead><tbody id="sb-a"></tbody></table>
+            </div>
+            <div class="sb-team">
+              <div class="sb-head team-b">Bravo <span id="sb-score-b"></span></div>
+              <table><thead><tr><th>Name</th><th>K</th><th>D</th><th></th></tr></thead><tbody id="sb-b"></tbody></table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= MENUS ================= -->
+      <div id="main-menu" class="screen">
+        <div class="menu-panel">
+          <h1 class="logo">KL SHADOW<span>HUNTER</span></h1>
+          <div class="subtitle">Tactical round-based shooter · Training Depot</div>
+          <div class="menu-grid">
+            <label>Mode
+              <select id="opt-mode">
+                <option value="solo">Solo vs Bots</option>
+                <option value="team">Team Elimination</option>
+                <option value="mission">Operation Deep Strike (Kuala Lumpur mission)</option>
+              </select>
+            </label>
+            <label>Difficulty
+              <select id="opt-difficulty">
+                <option value="easy">Easy</option>
+                <option value="normal">Normal</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+            <label id="tod-row">Time of day
+              <select id="opt-timeofday">
+                <option value="day">Day</option>
+                <option value="night">Night</option>
+              </select>
+            </label>
+            <label id="weather-row">Weather
+              <select id="opt-weather">
+                <option value="clear">Clear</option>
+                <option value="rain">Rain</option>
+              </select>
+            </label>
+            <label id="enemies-row">Enemy bots <span id="opt-enemies-val" class="val"></span>
+              <input id="opt-enemies" type="range" min="1" max="10" step="1" />
+            </label>
+            <label id="ally-row">Ally bots <span id="opt-allies-val" class="val"></span>
+              <input id="opt-allies" type="range" min="1" max="9" step="1" />
+            </label>
+            <label id="rounds-row">Rounds to win <span id="opt-rounds-val" class="val"></span>
+              <input id="opt-rounds" type="range" min="1" max="10" step="1" />
+            </label>
+            <label id="roundtime-row">Round time
+              <select id="opt-roundtime">
+                <option value="60">1:00</option>
+                <option value="90">1:30</option>
+                <option value="120">2:00</option>
+                <option value="180">3:00</option>
+              </select>
+            </label>
+            <div class="loadout-row">Loadout <span id="opt-loadout-summary" class="val"></span></div>
+          </div>
+          <div class="menu-buttons">
+            <button id="btn-play" class="btn primary">Play</button>
+            <button id="btn-loadout-main" class="btn">Armory &amp; Loadout</button>
+            <button id="btn-settings-main" class="btn">Settings</button>
+            <button id="btn-controls" class="btn">Controls</button>
+          </div>
+          <div id="loading-status" class="muted small"></div>
+        </div>
+      </div>
+
+      <div id="pause-menu" class="screen hidden">
+        <div class="menu-panel narrow">
+          <h2>Paused</h2>
+          <button id="btn-resume" class="btn primary">Resume</button>
+          <button id="btn-loadout-pause" class="btn">Armory &amp; Loadout</button>
+          <button id="btn-settings-pause" class="btn">Settings</button>
+          <button id="btn-restart-pause" class="btn">Restart Match</button>
+          <button id="btn-quit" class="btn">Quit to Main Menu</button>
+          <div id="resume-hint" class="muted small"></div>
+        </div>
+      </div>
+
+      <div id="settings-menu" class="screen hidden">
+        <div class="menu-panel">
+          <h2>Settings</h2>
+          <div class="menu-grid">
+            <label>Mouse sensitivity <span id="set-sens-val" class="val"></span>
+              <input id="set-sens" type="range" min="0.1" max="4" step="0.05" />
+            </label>
+            <label>Field of view <span id="set-fov-val" class="val"></span>
+              <input id="set-fov" type="range" min="60" max="110" step="1" />
+            </label>
+            <label>Master volume <span id="set-vol-val" class="val"></span>
+              <input id="set-vol" type="range" min="0" max="1" step="0.05" />
+            </label>
+            <label>Movement speed <span id="set-move-val" class="val"></span>
+              <input id="set-move" type="range" min="0.7" max="1.3" step="0.05" />
+            </label>
+            <label>Graphics quality
+              <select id="set-graphics">
+                <option value="auto">Auto (detect GPU)</option>
+                <option value="low">Low (no shadows, no post)</option>
+                <option value="medium">Medium (shadows, bloom, SMAA)</option>
+                <option value="high">High (soft shadows, GTAO, SMAA)</option>
+                <option value="ultra">Ultra (4K shadows, 1.5x res, GTAO+, MSAA)</option>
+              </select>
+            </label>
+            <label>Render scale <span id="set-scale-val" class="val"></span>
+              <input id="set-scale" type="range" min="0.5" max="1" step="0.05" />
+            </label>
+            <label class="check"><input id="set-invert" type="checkbox" /> Invert mouse Y</label>
+            <label class="check"><input id="set-fps" type="checkbox" /> Show FPS counter</label>
+            <label class="check"><input id="set-drs" type="checkbox" /> Dynamic resolution</label>
+          </div>
+          <div class="menu-buttons">
+            <button id="btn-settings-back" class="btn primary">Back</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="controls-menu" class="screen hidden">
+        <div class="menu-panel">
+          <h2>Controls</h2>
+          <table class="controls-table">
+            <tr><td>W A S D</td><td>Move</td></tr>
+            <tr><td>Mouse</td><td>Aim / look</td></tr>
+            <tr><td>Left mouse</td><td>Fire</td></tr>
+            <tr><td>Right mouse</td><td>Aim down sights (hold) · sniper scope stages · heavy stab · underhand throw</td></tr>
+            <tr><td>X / F</td><td>Fire mode (auto / burst / semi) / inspect weapon</td></tr>
+            <tr><td>5 / 6</td><td>Grenades / held equipment (press again to cycle)</td></tr>
+            <tr><td>Hold Q</td><td>Weapon wheel (move the mouse, release to select)</td></tr>
+            <tr><td>N / J / L</td><td>Night vision / thermal / flashlight</td></tr>
+            <tr><td>R</td><td>Reload</td></tr>
+            <tr><td>Space</td><td>Jump</td></tr>
+            <tr><td>Shift</td><td>Walk (quiet, more accurate)</td></tr>
+            <tr><td>Ctrl or C</td><td>Crouch</td></tr>
+            <tr><td>1 / 2 / 3, tap Q, Wheel</td><td>Primary / sidearm / knife, last weapon, cycle</td></tr>
+            <tr><td>E</td><td>Pick up weapon</td></tr>
+            <tr><td>G</td><td>Drop weapon</td></tr>
+            <tr><td>B</td><td>Quick buy / armory (during buy time)</td></tr>
+            <tr><td>Tab</td><td>Scoreboard</td></tr>
+            <tr><td>4 (mission)</td><td>Deep Strike uplink · left mouse opens targeting</td></tr>
+            <tr><td>V (mission)</td><td>Underground tactical cutaway</td></tr>
+            <tr><td>E (mission)</td><td>Collect intel (terminals, documents)</td></tr>
+            <tr><td>Esc</td><td>Pause / release mouse</td></tr>
+          </table>
+          <div class="muted small">Tip: Ctrl+W closes the browser tab in some browsers. Use C to crouch if you strafe while crouching.</div>
+          <div class="menu-buttons">
+            <button id="btn-controls-back" class="btn primary">Back</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="loadout-menu" class="screen hidden">
+        <div class="lo-panel">
+          <div class="lo-header"><h2>ARMORY</h2><span id="lo-sub" class="muted"></span>
+            <label class="check lo-sandbox"><input id="lo-sandbox" type="checkbox" /> Unlock everything (sandbox)</label>
+            <button id="lo-close" class="btn primary">Done</button></div>
+          <nav id="lo-cats"></nav>
+          <div class="lo-body">
+            <div id="lo-list"></div>
+            <div class="lo-detail">
+              <canvas id="lo-preview"></canvas>
+              <div class="lo-cols"><div id="lo-info"></div><div><div id="lo-attach"></div><div id="lo-actions"></div></div></div>
+            </div>
+          </div>
+          <div id="lo-summary"></div>
+        </div>
+      </div>
+
+      <div id="end-screen" class="screen hidden">
+        <div class="menu-panel narrow">
+          <h1 id="end-title">Victory</h1>
+          <div id="end-summary"></div>
+          <button id="btn-restart-end" class="btn primary">Restart</button>
+          <button id="btn-menu-end" class="btn">Main Menu</button>
+        </div>
+      </div>
+
+      <div id="error-box" class="hidden"></div>
+    </div>
+  </body>
+</html>

@@ -475,5 +475,12 @@ export function buildKLData() {
     },
     launchPad: [620, 0, -340],
     playerStart: [0, 0, 32],
+    // Random insertion points (one is picked per mission start, out of every hostile's sight).
+    insertions: [
+      [0, 0, 32], [-62, 0, 26], [62, 0, 10], [-63, 0, -55], [62, 0, -60], [-30, 0.15, -73], [30, 0.15, -73],
+      [-80, 0, 46], [80, 0, 46], [84, 0, 22], [-86, 12, -10], [-51, SH.up, 62], [0, 0, -44],
+      // concealed: alleys, under the garage, between the east towers, shop interiors, telecom compound
+      [-60, 0.15, -73], [-85, 0, -33], [85, 0, 3], [-62, 0, 82], [-56.5, 0.15, 75], [-45.5, 0.15, 61], [12, 0, 72],
+    ],
   };
 }

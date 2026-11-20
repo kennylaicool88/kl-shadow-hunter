@@ -685,6 +685,7 @@ export class WeaponManager {
     const spread = w.getSpread(this._movementState()); // measured before the shot adds bloom
     if (!w.tryFire(interval)) return false;
     this.inspectTime = 0;
+    this.player.spawnGrace = 0; // firing gives your position away
 
     if (w.isMelee) {
       this._melee(w, heavy);

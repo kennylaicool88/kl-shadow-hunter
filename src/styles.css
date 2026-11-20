@@ -386,7 +386,12 @@ input[type=range] { accent-color: var(--accent); }
 #flashbang { position: absolute; inset: 0; background: #fff; opacity: 0; display: none; pointer-events: none; }
 
 /* scope variants */
-#scope-overlay .scope-mildots, #scope-overlay .scope-chevron, #scope-overlay .scope-bino { display: none; }
+#scope-overlay .scope-mildots, #scope-overlay .scope-chevron, #scope-overlay .scope-bino, #scope-overlay .scope-dot { display: none; }
+/* 2x low-power optic: wide eyepiece, red dot, no crosshair */
+#scope-overlay[data-type="lpvo"] .scope-line { display: none; }
+#scope-overlay[data-type="lpvo"] .scope-ring { width: 112vmin; height: 112vmin; box-shadow: 0 0 0 200vmax #000, inset 0 0 70px 10px rgba(0,0,0,0.85); }
+#scope-overlay[data-type="lpvo"] .scope-dot { display: block; position: absolute; left: 50%; top: 50%; width: 0.7vmin; height: 0.7vmin;
+  border-radius: 50%; background: #ff3020; transform: translate(-50%, -50%); box-shadow: 0 0 5px #ff3020; }
 #scope-overlay[data-type="mildot"] .scope-mildots { display: block; position: absolute; left: 50%; top: 50%; width: 30vmin; height: 2px; transform: translate(-50%, -50%);
   background: radial-gradient(circle, #000 2px, transparent 2.5px) 0 0 / 3vmin 2px repeat-x; }
 #scope-overlay[data-type="acog"] .scope-line { display: none; }

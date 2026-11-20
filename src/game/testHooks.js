@@ -343,6 +343,14 @@ function installMissionHooks(game, hooks, step) {
     // 1. City movement
     ok('mission loads the Kuala Lumpur district', await startMission('day') && game.levelId === 'kl', `level=${game.levelId}`);
     const m = mm();
+    // Random insertion: no hostile on the same level within 25 m, none with a clear line within 60 m
+    const ip = p.body.pos;
+    const watchers = game.enemies.bots.filter((b) => b.alive).filter((b) => {
+      const q = b.body.pos, d = Math.hypot(q.x - ip.x, q.y - ip.y, q.z - ip.z);
+      return (d < 25 && Math.abs(q.y - ip.y) < 3) || (d < 60 && game.collision.lineClear(q.x, q.y + 1.6, q.z, ip.x, ip.y + 1.6, ip.z));
+    });
+    ok('mission inserts the player out of every hostile\'s sight', watchers.length === 0 && p.spawnGrace > 0, `at ${ip.x.toFixed(0)},${ip.z.toFixed(0)} watchers=${watchers.length}`);
+    hooks.teleport(0, 0, 32, 0); // movement check from the classic park start
     const z0 = p.body.pos.z;
     game.input.keys.add('KeyW');
     step(1.5);

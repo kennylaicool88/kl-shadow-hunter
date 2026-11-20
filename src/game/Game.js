@@ -620,6 +620,7 @@ export class Game {
       return;
     }
     const p = this.player;
+    if (p.spawnGrace > 0) p.spawnGrace = Math.max(0, p.spawnGrace - dt);
     if (p.alive) {
       if (!m) this._handleBuyMenu();
       else if (m.handleInput()) { /* mission consumed this frame's interaction keys */ }

@@ -58,6 +58,13 @@ export function lathe(pts, x = 0, y = 0, z = 0, seg = 20) {
   return ni(g.translate(x, y, z));
 }
 
+// Hollow tube along Z (optic housings you can look through): outer wall, rear rim, bore, front rim.
+// The closed profile keeps every face pointing out of the wall, so the bore is visible from inside.
+export function tube(rOut, rIn, len, x = 0, y = 0, z = 0, seg = 20) {
+  const z0 = -len / 2, z1 = len / 2;
+  return lathe([[rOut, z0], [rOut, z1], [rIn, z1], [rIn, z0], [rOut, z0]], x, y, z, seg);
+}
+
 // Side profile [[z, y], ...] extruded symmetrically along X, with a bevel.
 export function prof(pts, width, bevel = 0.002, x = 0, curveSegments = 6) {
   const s = new THREE.Shape(pts.map(([z, y]) => new THREE.Vector2(z, y)));

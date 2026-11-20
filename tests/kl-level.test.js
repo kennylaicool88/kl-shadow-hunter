@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { CollisionSystem } from '../src/physics/CollisionSystem.js';
 import { buildKLData, TUNNEL_Y } from '../src/city/klLevelData.js';
 import { NavGraph } from '../src/enemies/NavGraph.js';
+import { pickInsertion } from '../src/mission/insertion.js';
 
 const data = buildKLData();
 const col = new CollisionSystem(data.solids);
@@ -88,6 +89,36 @@ test('east supply branch links the tunnels to the E3 shaft', () => {
   const path = nav.findPath({ x: 0, y: TUNNEL_Y, z: 46 }, { x: 92, y: 0, z: 74 });
   assert.ok(path, 'no path from the tunnel to the east lot via E3');
   assert.ok(nav.nodes.some((n) => n.y < -1 && n.y > TUNNEL_Y + 0.5 && n.x > 90 && n.x < 94), 'nodes on E3 stairs');
+});
+
+test('every mission insertion point is clear and reachable', () => {
+  for (const [x, y, z] of data.insertions) {
+    assert.equal(col.bodyOverlaps({ x, y, z }, 0.4, 1.8), false, `insertion ${x},${y},${z} overlaps`);
+    const floor = col.floorBelow(x, z, 0.4, y + 0.01, 0.5);
+    assert.ok(floor !== null && Math.abs(floor - y) < 0.01, `insertion ${x},${y},${z} not on a floor (${floor})`);
+    if (y > 10) continue; // garage roof: bots don't path there; its stair is tested above
+    const n = nav.nearestNode(x, y, z, false);
+    assert.ok(n && Math.hypot(n.x - x, n.z - z) < 3 && nav.findPath(n, start), `insertion ${x},${y},${z} not connected`);
+  }
+});
+
+test('insertion avoids every point a hostile can see, at random', () => {
+  const pts = [[0, 0, 0], [100, 0, 0], [0, 0, 100], [-100, 0, 0]];
+  const threats = [{ x: 5, y: 0, z: 10 }, { x: -80, y: 0, z: 0 }];
+  const blocked = (x) => Math.abs(x) > 50; // pretend walls hide anything off the x axis centre
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) {
+    const r = pickInsertion(pts, threats, (ax, ay, az, bx) => !blocked(bx));
+    assert.ok(r.safe);
+    seen.add(r.pos.join(','));
+  }
+  assert.ok(!seen.has('0,0,0') && !seen.has('-100,0,0'), 'never next to or in view of a hostile');
+  assert.equal(seen.size, 2, 'both hidden points get used');
+  // When every point is watched, the one farthest from any hostile wins.
+  const watchers = pts.map((p, i) => ({ x: p[0] + 10 * (i + 1), y: 0, z: p[2] }));
+  const r = pickInsertion(pts, watchers, () => true);
+  assert.equal(r.safe, false);
+  assert.deepEqual(r.pos, [-100, 0, 0]);
 });
 
 test('landmarks are not obstructed and bunkers sit away from them', () => {

@@ -8,7 +8,7 @@ export const SLOT_LABEL = { optic: 'Optic', muzzle: 'Muzzle', under: 'Underbarre
 export const ATTACHMENTS = {
   reddot: { slot: 'optic', name: 'Red Dot Sight', desc: 'Compact reflex sight. Fast target acquisition.', ads: { zoom: 1.35, time: -0.02 } },
   holo: { slot: 'optic', name: 'Holographic Sight', desc: 'Wide-window holographic reticle. Slightly tighter ADS spread.', ads: { zoom: 1.3, time: -0.03 }, mods: { adsSpread: 0.94 } },
-  x2: { slot: 'optic', name: '2x Optic', desc: 'Low-power magnified optic for mid range.', ads: { zoom: 2, time: 0.03 }, mods: { mobility: -0.005 } },
+  x2: { slot: 'optic', name: '2x Optic', desc: 'Low-power magnified optic for mid range. Full sight picture with a red dot when aiming.', ads: { zoom: 2, time: 0.03, overlay: 'lpvo' }, mods: { mobility: -0.005 } },
   x4: { slot: 'optic', name: '4x Scope', desc: 'Prism scope with chevron reticle. Full-screen sight picture when aiming.', ads: { zoom: 4, time: 0.06, overlay: 'acog' }, mods: { mobility: -0.01 } },
   x8: { slot: 'optic', name: '8x Sniper Scope', desc: 'High-power precision scope (two zoom stages on bolt rifles).', ads: { zoom: 8, time: 0.1, overlay: 'mildot' }, mods: { mobility: -0.02 } },
   suppressor: { slot: 'muzzle', name: 'Suppressor', desc: 'Quieter shots that alert fewer enemies, no muzzle flash. Slight damage loss.', mods: { damage: 0.95, range: 1.1, recoil: 0.92, noise: 0.4, tracer: 0.4 } },

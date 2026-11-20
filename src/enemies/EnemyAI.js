@@ -130,6 +130,7 @@ export class EnemyAI {
   // ---------------------------------------------------------------- perception
   _canSee(t) {
     const b = this.bot;
+    if (t.spawnGrace > 0) return false; // just inserted: not spotted until the grace ends or they fire
     b.getEyePosition(_eye);
     const dx = t.body.pos.x - _eye.x, dz = t.body.pos.z - _eye.z;
     const dist = Math.hypot(dx, dz);

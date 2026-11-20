@@ -13,6 +13,7 @@ import { DrillingSequence } from '../underground/DrillingSequence.js';
 import { SciFiProjectile } from '../weapons/SciFiProjectile.js';
 import { Weapon } from '../weapons/Weapon.js';
 import { GameState } from '../game/GameState.js';
+import { pickInsertion } from './insertion.js';
 
 const _v = new THREE.Vector3();
 const fmtTime = (s) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -67,7 +68,11 @@ export class MissionMode {
     g.enemies.setupMission(this.level, g.settings.difficulty);
     g.pickups.clear();
     g.effects.reset();
-    g.player.reset(this.level.playerStart, 0);
+    // Random insertion out of every hostile's sight, plus a few seconds before anyone can spot you.
+    const threats = g.enemies.bots.filter((b) => b.alive).map((b) => b.body.pos);
+    const ins = pickInsertion(this.level.insertions || [this.level.playerStart], threats, (...a) => g.collision.lineClear(...a));
+    g.player.reset(ins.pos, ins.yaw);
+    g.player.spawnGrace = 4;
     g.player.kills = 0;
     g.player.deaths = 0;
     g.player.armor = 50;

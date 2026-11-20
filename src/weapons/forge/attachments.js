@@ -3,7 +3,7 @@
 // lights/lasers clamp to side rails, foregrips move the support hand, extended magazines lengthen
 // the magazine part, and the tactical stock replaces the stock part.
 import * as THREE from 'three';
-import { Build, instantiate, box, cyl, cylX, cylY, lathe, prof, tor, sphere } from './parts.js';
+import { Build, instantiate, box, cyl, cylX, cylY, lathe, prof, tor, sphere, tube } from './parts.js';
 import { material } from './materials.js';
 
 const PI = Math.PI;
@@ -76,7 +76,7 @@ function bakeAttachment(id, { lod = 0, small = false } = {}) {
         out.sightY = 0.014; out.lensZ = -0.008;
       } else {
         b.add('anod_black', box(0.026, 0.012, 0.05, 0, 0.006, 0, 0.003)); // base/clamp
-        b.add('anod_black', cyl(0.017, 0.042, 0, 0.034, -0.004, { seg: b.seg(20) }));
+        b.add('anod_black', tube(0.017, 0.0145, 0.042, 0, 0.034, -0.004, b.seg(20))); // hollow: the dot is seen through it
         b.add('anod_black', cylX(0.007, 0.012, 0.02, 0.034, 0.002), cylY(0.0065, 0.01, 0, 0.055, 0.002));
         b.add('lens_clear', cyl(0.0145, 0.002, 0, 0.034, -0.024, { seg: b.seg(20) }));
         out.sightY = 0.034; out.lensZ = -0.022;
@@ -96,7 +96,7 @@ function bakeAttachment(id, { lod = 0, small = false } = {}) {
     }
     case 'x2': {
       b.add('anod_black', box(0.026, 0.012, 0.06, 0, 0.006, 0, 0.003));
-      b.add('anod_black', cyl(0.016, 0.11, 0, 0.04, -0.005, { seg: b.seg(20) }));
+      b.add('anod_black', tube(0.016, 0.0135, 0.11, 0, 0.04, -0.005, b.seg(20))); // hollow body: look through it at ADS
       b.add('anod_black', lathe([[0.016, 0.05], [0.019, 0.06], [0.019, 0.075]], 0, 0.04, 0, b.seg(20)));
       b.add('anod_black', lathe([[0.016, -0.055], [0.02, -0.065], [0.02, -0.07]], 0, 0.04, 0, b.seg(20)));
       b.add('knurl', cylY(0.007, 0.01, 0, 0.06, -0.005, 12));

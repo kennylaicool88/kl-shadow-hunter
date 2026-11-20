@@ -7,8 +7,9 @@
 //   KLCC Park with lake                   z -30 ..  38
 //   South avenue                          z  38 ..  54
 //   South district (yard, compound, lots) z  54 ..  96
+//   Shophouse row (2 floors + roof)       x -60 .. -42, z 56 .. 77, skybridge from the park
 //   West / east districts                 |x| 72 .. 96
-//   B1 service tunnels (y = -8)           under the south avenue
+//   B1 service tunnels (y = -8)           under the south avenue, east branch to the E3 shaft
 import { box, wallX, wallZ } from '../maps/mapData.js';
 
 export const KL_HALF = 96;
@@ -46,16 +47,41 @@ function stairsDownZ(x0, x1, zTop, dir, steps, floorY, depth, mat) {
   return out;
 }
 
+// Stairs climbing from y0 to y1 along Z, starting at zFoot and rising toward `dir` (solid underneath).
+// The last step stops one rise short of y1 so the landing is an ordinary step up.
+function stairsUpZ(x0, x1, zFoot, dir, y0, y1, steps, depth, mat) {
+  const out = [];
+  const rise = (y1 - y0) / (steps + 1);
+  for (let i = 0; i < steps; i++) {
+    const za = zFoot + dir * depth * i, zb = zFoot + dir * depth * (i + 1);
+    out.push(box(x0, y0, za, x1, y0 + rise * (i + 1), zb, mat));
+  }
+  return out;
+}
+
+// Nav points on every other step of a stairsUpZ flight (narrow stairs fall between nav grid samples).
+function stairNav(xc, zFoot, dir, y0, y1, steps, depth) {
+  const rise = (y1 - y0) / (steps + 1);
+  const out = [];
+  for (let i = 0; i < steps; i += 2) out.push([xc, y0 + rise * (i + 1), zFoot + dir * depth * (i + 0.5)]);
+  out.push([xc, y1, zFoot + dir * depth * (steps + 0.8)]);
+  return out;
+}
+
+// The same boxes moved up by dy (walls for upper floors built with wallX / wallZ).
+const lift = (boxes, dy) => boxes.map((b) => ({ ...b, min: [b.min[0], b.min[1] + dy, b.min[2]], max: [b.max[0], b.max[1] + dy, b.max[2]] }));
+
 export function buildKLData() {
   const solids = [];
   const add = (b) => (Array.isArray(b) ? solids.push(...b) : solids.push(b));
   const H = KL_HALF;
   const T = TUNNEL_Y;
 
-  // Stairwell openings in the street slab (public entrance E1, hidden entrance E2).
+  // Stairwell openings in the street slab (public entrance E1, hidden entrance E2, east supply shaft E3).
   const E1 = [26, 28, 30, 42];
   const E2 = [-38, 60, -34, 74];
-  const holes = [E1, E2];
+  const E3 = [90, 56, 94, 70];
+  const holes = [E1, E2, E3];
 
   // ---------------------------------------------------------------- ground
   for (const [x0, z0, x1, z1] of subtract([-112, -112, 112, 112], holes)) add(box(x0, -1, z0, x1, 0, z1, 'asphalt'));
@@ -102,10 +128,10 @@ export function buildKLData() {
     { x0: 74, z0: -30, x1: 96, z1: 0, h: 80, style: 'office' },
     // South district
     { x0: -96, z0: 56, x1: -64, z1: 96, h: 75, style: 'glass' },
-    { x0: -60, z0: 56, x1: -42, z1: 96, h: 14, style: 'shophouse' },
+    { x0: -60, z0: 77, x1: -42, z1: 96, h: 14, style: 'shophouse', skipFaces: ['north'] }, // rear row; front units are enterable
     { x0: 24, z0: 56, x1: 56, z1: 96, h: 55, style: 'office' },
   ];
-  for (const b of buildings) add(box(b.x0, 0, b.z0, b.x1, b.h, b.z1, `bld-${b.style}`));
+  for (const b of buildings) add({ ...box(b.x0, 0, b.z0, b.x1, b.h, b.z1, `bld-${b.style}`), skipFaces: b.skipFaces });
 
   // ---------------------------------------------------------------- Twin Towers podium mall (enterable)
   const PR = 12; // podium roof
@@ -201,6 +227,69 @@ export function buildKLData() {
   add(box(80, 0, 28, 82, 2.2, 30, 'planter'));
   add(box(86, 0, 28, 88, 2.2, 30, 'planter'));
 
+  // ---------------------------------------------------------------- Shophouse row (enterable)
+  // Three pre-war style units (x -60..-42.3, z 56..77): five-foot-way arcade, ground-floor shops
+  // linked at the back, an upper floor linked at the front, and a roof reached from the east unit.
+  // Upper floor sits at 5.0 so the ground floor keeps its own nav level under the slab.
+  const SH = { x0: -60, x1: -42.3, z0: 56, z1: 77, up: 5.0, roof: 9.5 };
+  const holeUp = [-59.7, 67.28, -58.3, 74.2]; // stairwell to the upper floor (west unit)
+  const holeRoof = [-43.7, 67.7, -42.3, 74.2]; // stairwell to the roof (east unit)
+  add(box(SH.x0, 0, SH.z0, SH.x1, 0.15, 58.5, 'paving')); // arcade floor
+  add(box(SH.x0, 0, 58.5, SH.x1, 0.15, SH.z1, 'shopfloor'));
+  for (const [x0, z0, x1, z1] of subtract([SH.x0, SH.z0, SH.x1, SH.z1], [holeUp])) add(box(x0, SH.up - 0.3, z0, x1, SH.up, z1, 'shopfloor'));
+  for (const [x0, z0, x1, z1] of subtract([SH.x0, SH.z0, SH.x1, SH.z1], [holeRoof])) add(box(x0, SH.roof - 0.3, z0, x1, SH.roof, z1, 'mallroof'));
+  // Painted ceilings under both slabs, fluorescent tubes in every unit
+  for (const [x0, z0, x1, z1] of subtract([SH.x0, SH.z0, SH.x1, SH.z1], [holeUp])) add(box(x0, SH.up - 0.32, z0, x1, SH.up - 0.3, z1, 'ceiling'));
+  for (const [x0, z0, x1, z1] of subtract([SH.x0, SH.z0, SH.x1, SH.z1], [holeRoof])) add(box(x0, SH.roof - 0.32, z0, x1, SH.roof - 0.3, z1, 'ceiling'));
+  for (const xc of [-56.6, -51, -45.4]) {
+    for (const [y, z] of [[SH.up - 0.32, 63.5], [SH.up - 0.32, 70.5], [SH.roof - 0.32, 61], [SH.roof - 0.32, 70]]) add(box(xc - 0.6, y - 0.1, z - 0.06, xc + 0.6, y, z + 0.06, 'lamp'));
+  }
+  // Ground floor: shop fronts behind the arcade columns, a side door to the west alley, back doors between units
+  add(wallX(SH.x0, SH.x1, 58.65, SH.up - 0.3, 0.3, [[-58.2, -55.8], [-52.2, -49.8], [-46.4, -44]], 'shopwall', 3));
+  add(wallZ(58.5, SH.z1, -59.85, SH.up - 0.3, 0.3, [[60, 61.6]], 'shopwall', 2.5));
+  for (const x of [-54, -48]) add(wallZ(58.8, SH.z1, x, SH.up - 0.3, 0.3, [[74, 75.4]], 'shopwall', 2.4));
+  for (const x of [-60, -54.2, -48.2]) add(box(x, 0, 56, x + 0.4, SH.up - 0.3, 56.4, 'shopwall'));
+  // Upper floor: front windows over the avenue (the middle one is the skybridge door), doors between units
+  add(box(SH.x0, SH.up, 56, -52, 6, 56.3, 'shopwall'));
+  add(box(-49.6, SH.up, 56, SH.x1, 6, 56.3, 'shopwall'));
+  add(lift(wallX(SH.x0, SH.x1, 56.15, SH.roof - 0.3 - 6, 0.3, [[-58.6, -55.4], [-52, -49.6], [-46.6, -43.4]], 'shopwall', 2.2), 6));
+  add(lift(wallZ(56.3, SH.z1, -59.85, SH.roof - 0.3 - SH.up, 0.3, [], 'shopwall'), SH.up));
+  for (const x of [-54, -48]) add(lift(wallZ(56.3, SH.z1, x, SH.roof - 0.3 - SH.up, 0.3, [[62, 63.4]], 'shopwall', 2.3), SH.up));
+  add(stairsUpZ(-59.7, -58.3, 74, -1, 0.15, SH.up, 16, 0.42, 'stairs'));
+  add(stairsUpZ(-43.7, -42.3, 74, -1, SH.up, SH.roof, 15, 0.42, 'stairs'));
+  add(box(-58.3, SH.up, 67.28, -58.15, SH.up + 1, 74.35, 'rail')); // stairwell guard rails
+  add(box(-59.7, SH.up, 74.2, -58.15, SH.up + 1, 74.35, 'rail'));
+  add(box(-43.85, SH.roof, 67.7, -43.7, SH.roof + 1, 74.35, 'rail'));
+  add(box(-43.85, SH.roof, 74.2, -42.3, SH.roof + 1, 74.35, 'rail'));
+  // Roof parapets, water tank and condenser units (cover for a rooftop overwatch)
+  add(box(SH.x0, SH.roof, 56, SH.x1, SH.roof + 1.1, 56.3, 'shopwall'));
+  add(box(SH.x0, SH.roof, 56.3, -59.7, SH.roof + 1.1, SH.z1, 'shopwall'));
+  add(box(-52, SH.roof, 70, -49, SH.roof + 2.2, 73, 'tank'));
+  add(box(-57.5, SH.roof, 61, -55.5, SH.roof + 1.2, 62.4, 'cabinet'));
+  add(box(-47, SH.roof, 60, -45.4, SH.roof + 1.2, 61.4, 'cabinet'));
+  // Shop interiors: grocer (west), kopitiam (middle), laundry (east); storage upstairs
+  add(box(-57.5, 0, 62, -55, 1, 62.8, 'desk'));
+  add(box(-54.6, 0, 60.5, -54.15, 2, 66, 'shelf'));
+  add(box(-57.6, 0, 68, -56.2, 2, 72, 'shelf'));
+  for (const [x, z] of [[-52, 62.5], [-49.6, 64.5], [-52, 67.5], [-49.6, 69]]) add(box(x - 0.5, 0, z - 0.5, x + 0.5, 0.75, z + 0.5, 'desk'));
+  add(box(-53.6, 0, 71.5, -48.6, 1.1, 72.3, 'kiosk'));
+  add(box(-47.85, 0, 60, -47, 1.2, 65, 'cabinet'));
+  add(box(-45.2, 0, 67, -44.2, 1, 68, 'crate'));
+  add(box(-57, SH.up, 58.5, -55, SH.up + 0.6, 60.5, 'crate'));
+  add(box(-52.4, SH.up, 72.5, -50.4, SH.up + 1.2, 74.5, 'crate'));
+  add(box(-46.4, SH.up, 64, -44.4, SH.up + 0.8, 65.2, 'desk'));
+
+  // Covered pedestrian skybridge: park (stairs at z 26) over the south avenue into the shophouse upper floor.
+  const SB = { x0: -52, x1: -49.6, z0: 33.4 };
+  add(stairsUpZ(SB.x0, SB.x1, 26.2, 1, 0, SH.up, 16, 0.45, 'stairs'));
+  add(box(SB.x0 - 0.15, SH.up - 0.3, SB.z0, SB.x1 + 0.15, SH.up, SH.z0, 'bridge'));
+  add(box(SB.x0 - 0.15, SH.up, SB.z0, SB.x0, SH.up + 1.1, SH.z0, 'glassrail'));
+  add(box(SB.x1, SH.up, SB.z0, SB.x1 + 0.15, SH.up + 1.1, SH.z0, 'glassrail'));
+  for (const z of [38.6, 52.6]) for (const x of [SB.x0, SB.x1 - 0.4]) add(box(x, 0, z, x + 0.4, SH.up - 0.3, z + 0.4, 'bridge'));
+  add(box(SB.x0 - 0.4, 7.7, 26.2, SB.x1 + 0.4, 7.85, SH.z0, 'bridgeroof'));
+  for (const z of [33.6, 39, 44.5, 50, 55.6]) for (const x of [SB.x0 - 0.15, SB.x1]) add(box(x, SH.up + 1.1, z - 0.08, x + 0.15, 7.7, z + 0.08, 'rail'));
+  for (const x of [SB.x0 - 0.15, SB.x1]) add(box(x, 0, 26.3, x + 0.15, 7.7, 26.46, 'rail')); // posts at the stair foot
+
   // ---------------------------------------------------------------- South district open lots
   // Construction yard (x -42..0, z 56..94) behind a hoarding with two gates.
   add(wallX(-42, 0, 56, 2.6, 0.3, [[-30, -26], [-8, -4]], 'hoarding'));
@@ -219,6 +308,10 @@ export function buildKLData() {
   add(box(-38.3, 0, 60, -38, 1.1, 74, 'rail'));
   add(box(-34, 0, 60, -33.7, 1.1, 74, 'rail'));
   add(box(-38.3, 0, 59.7, -33.7, 1.1, 60, 'rail'));
+  // E3 rails (open at the south end, z = 70)
+  add(box(89.7, 0, 56, 90, 1.1, 70, 'rail'));
+  add(box(94, 0, 56, 94.3, 1.1, 70, 'rail'));
+  add(box(89.7, 0, 55.7, 94.3, 1.1, 56, 'rail'));
 
   // Telecom compound (x 2..22, z 64..94) – cover story for the protected surveillance post.
   add(wallX(2, 22, 64, 2.4, 0.3, [[10, 14]], 'fence'));
@@ -254,22 +347,32 @@ export function buildKLData() {
 
   // ---------------------------------------------------------------- B1 service tunnels (y = -8)
   add(box(-56, T - 1, 38, 56, T, 76, 'tunnelfloor'));
+  add(box(56, T - 1, 38, 96, T, 72, 'tunnelfloor'));
   add(stairsDownZ(26, 30, 28, 1, 26, T, 14 / 26, 'stairs')); // E1: z 28 -> 42 going south
   add(stairsDownZ(-38, -34, 74, -1, 26, T, 14 / 26, 'stairs')); // E2: z 74 -> 60 going north
+  add(stairsDownZ(90, 94, 70, -1, 26, T, 14 / 26, 'stairs')); // E3: z 70 -> 56 going north
   const TW = (x0, z0, x1, z1) => add(box(x0, T, z0, x1, -1, z1, 'tunnel'));
   // Stairwell side walls (underground part)
   TW(25.5, 28, 26, 42); TW(30, 28, 30.5, 42);
   TW(-38.5, 50.5, -38, 74); TW(-34, 50.5, -33.5, 74);
-  // Main corridor z 42..50, x -50..50
-  for (const [a, b] of [[-50.5, 26], [30, 50.5]]) TW(a, 41.5, b, 42);
-  const southGaps = [[-47, -45], [-38, -34], [-22, -18], [14, 18]];
+  TW(89.5, 50.5, 90, 70); TW(94, 50.5, 94.5, 70);
+  // Main corridor z 42..50, x -50..50, with the east supply branch continuing to the E3 shaft (x 94)
+  for (const [a, b] of [[-50.5, 26], [30, 94.5]]) TW(a, 41.5, b, 42);
+  const southGaps = [[-47, -45], [-38, -34], [-22, -18], [14, 18], [90, 94]];
   {
     let cur = -50.5;
     for (const [g0, g1] of southGaps) { TW(cur, 50, g0, 50.5); cur = g1; }
-    TW(cur, 50, 50.5, 50.5);
   }
   TW(-50.5, 41.5, -50, 50.5);
-  TW(50, 41.5, 50.5, 50.5);
+  TW(94, 41.5, 94.5, 50.5);
+  // East branch: a pump-room bulkhead with a doorway splits the long run; pallets for cover
+  add(box(66, T, 42, 66.6, -1, 44.2, 'tunnel'));
+  add(box(66, T, 47.8, 66.6, -1, 50, 'tunnel'));
+  add(box(66, -5.2, 44.2, 66.6, -1, 47.8, 'tunnel'));
+  add(box(58, T, 44, 60, T + 1.2, 45.6, 'crate'));
+  add(box(76, T, 47, 78, T + 1.2, 49, 'crate'));
+  add(box(84, T, 42.5, 87, T + 1.6, 44, 'generator'));
+  for (const x of [60, 72, 84]) add(box(x - 0.6, -1.15, 45.6, x + 0.6, -1, 46.4, 'lamp')); // ceiling strip lights
   // Rooms south of the corridor
   const room = (x0, x1, z1) => { TW(x0 - 0.5, 50.5, x0, z1 + 0.5); TW(x1, 50.5, x1 + 0.5, z1 + 0.5); TW(x0 - 0.5, z1, x1 + 0.5, z1 + 0.5); };
   room(-50, -40, 62); // generator room
@@ -290,7 +393,9 @@ export function buildKLData() {
     id: 'kl',
     solids,
     bounds: { min: [-H, -10, -H], max: [H, 20, H] },
-    navLevels: [{ from: 4.6, length: 6 }, { from: -1.5, length: 8 }],
+    // Street level, upper floors (shophouse 5.0, skybridge deck; below the 7.7 m bridge roof), tunnels.
+    navLevels: [{ from: 4.6, length: 6 }, { from: 7.4, length: 3 }, { from: -1.5, length: 8 }],
+    navExtra: stairNav(-59, 74, -1, 0.15, SH.up, 16, 0.42),
     navSpacing: 2.5,
     spawns: { A: [[0, 0, 32]], B: [] },
     spawnYaw: { A: 0, B: Math.PI },
@@ -300,6 +405,8 @@ export function buildKLData() {
     towers,
     garage: G,
     lobby: L,
+    shophouses: SH,
+    skybridge: { x0: SB.x0, z0: 26.2, x1: SB.x1, z1: SH.z0 },
     trees,
     palms,
     holes,
@@ -307,6 +414,7 @@ export function buildKLData() {
     entrances: [
       { id: 'E1', name: 'Public station entrance', rect: E1, hidden: false },
       { id: 'E2', name: 'Hidden service stairwell', rect: E2, hidden: true },
+      { id: 'E3', name: 'East lot supply shaft', rect: E3, hidden: true },
     ],
     // Hostile NPC placement by zone. courier = carries intel when killed.
     hostiles: [
@@ -322,16 +430,20 @@ export function buildKLData() {
       { zone: 'tunnel', pos: [0, T, 46], weapon: 'shotgun' },
       { zone: 'tunnel', pos: [24, T, 58], weapon: 'rifle', courier: true },
       { zone: 'eastlot', pos: [70, 0, 76], weapon: 'rifle' },
-      { zone: 'eastlot', pos: [90, 0, 66], weapon: 'rifle', minDifficulty: 'hard' },
+      { zone: 'eastlot', pos: [86, 0, 66], weapon: 'rifle', minDifficulty: 'hard' },
+      { zone: 'shophouse', pos: [-51, 0.15, 66], weapon: 'shotgun' },
+      { zone: 'shophouse', pos: [-56, SH.up, 64], weapon: 'rifle', minDifficulty: 'normal' },
+      { zone: 'tunnel', pos: [80, T, 46], weapon: 'rifle', minDifficulty: 'normal' },
     ],
     zones: {
       park: [[-30, 0, 24], [30, 0, -20], [-40, 0, -12], [40, 0, 20], [0, 0, 26], [-34, 0, -24], [34, 0, -26]],
       mall: [[-22, 0, -42], [22, 0, -58], [0, 0, -40], [-30, 0, -62], [30, 0, -40], [0, 0, -60]],
       yard: [[-30, 0, 70], [-10, 0, 76], [-22, 0, 90], [-36, 0, 86], [-6, 0, 60]],
-      tunnel: [[-40, T, 46], [0, T, 46], [24, T, 58], [40, T, 46], [-20, T, 58], [-45, T, 58]],
-      eastlot: [[70, 0, 76], [90, 0, 66], [84, 0, 90], [64, 0, 60]],
+      tunnel: [[-40, T, 46], [0, T, 46], [24, T, 58], [40, T, 46], [-20, T, 58], [-45, T, 58], [72, T, 46], [90, T, 46]],
+      eastlot: [[70, 0, 76], [86, 0, 66], [84, 0, 90], [64, 0, 60]],
+      shophouse: [[-51, 0.15, 66], [-45.5, 0.15, 62], [-57, 0.15, 65], [-56, SH.up, 64], [-50.8, SH.up, 68], [-45, SH.up, 70], [-51, SH.up, 44]],
     },
-    reinforcementSpawns: [[-44, T, 46], [44, T, 46], [-20, 0, 92]],
+    reinforcementSpawns: [[-44, T, 46], [44, T, 46], [-20, 0, 92], [88, T, 46]],
     intel: [
       { id: 'I1', name: 'Mall security terminal', pos: [36, 0.9, -63], kind: 'terminal',
         reveals: [{ bunker: 'B-01', evidence: 55 }], text: 'Security logs show night-time excavation crews entering the construction yard south of the park.' },
@@ -341,7 +453,7 @@ export function buildKLData() {
         reveals: [{ bunker: 'B-02', evidence: 100 }], text: 'JTF notice: SENTINEL beneath the telecom compound is an allied surveillance post. Protected – do not strike.' },
       { id: 'I4', name: 'Tunnel control server', pos: [26, T + 1.0, 63], kind: 'terminal',
         reveals: [{ bunker: 'B-03', evidence: 100 }, { bunker: 'B-04', evidence: 40 }],
-        text: 'Install orders for thermal emitters at MIRAGE (decoy). Separate supply route to a deep site under the east lot.' },
+        text: 'Install orders for thermal emitters at MIRAGE (decoy). Separate supply route to a deep site under the east lot.', revealsEntrance: 'E3' },
       { id: 'I5', name: 'Smuggler\'s note', pos: [-36.5, 0.2, 76.5], kind: 'document',
         reveals: [{ bunker: 'B-01', evidence: 20 }], text: 'Hand-drawn map of a hidden stairwell behind the containers leading to the service tunnels.', revealsEntrance: 'E2' },
     ],

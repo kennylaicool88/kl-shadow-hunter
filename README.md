@@ -126,6 +126,18 @@ performance. Rocket and energy-weapon behaviour is fictional.
   hip fire, visible dot), foregrip (less recoil), extended magazine (+50%, or a +3 tube
   extension on pump guns), tactical stock.
 
+**Bullet penetration** (a gameplay model, `src/weapons/penetration.js`):
+- Rounds pass through thin cover: plaster partitions, glass, fences, hoardings, furniture,
+  crates and hedges. They pass through at most two solids and lose damage with each.
+- Concrete, building cores, vehicles and containers always stop them.
+- Penetration power depends on the class. Sniper rifles go through the most, then heavies,
+  DMRs, rifles, SMGs and pistols; shotgun pellets barely penetrate.
+- Entry and exit holes both leave impacts.
+
+**Suppression:** a round passing within about 1.6 m of a hostile spoils its aim for a few
+seconds. A bot under sustained fire may break for cover, and an unaware bot turns toward the
+shooter.
+
 **Grenade effects:**
 - **Frag:** blast damage with falloff; walls block it.
 - **Smoke:** a cloud that blocks the vision of bots, cameras and the tracker.
@@ -198,7 +210,7 @@ penetration model.
 
 ### Mission flow
 1. You start in KLCC Park facing the Twin Towers. Hostile NPCs patrol the park, the podium mall,
-   the construction yard, the east lot and the B1 service tunnels.
+   the shophouse row, the construction yard, the east lot and the B1 service tunnels.
 2. **Gather intelligence.** Press **E** at terminals, laptops and documents (mall security office,
    site foreman's table, office-tower lobby, tunnel control room, a hidden note), and from the
    courier's briefcase. Intel locates facilities and confirms their classification.
@@ -254,9 +266,18 @@ Seekers:
   parking garage with an exterior stair to the roof; an office lobby; alleys; a construction yard
   with a hidden stairwell; a public station entrance down to the B1 tunnels (rooms, control room,
   generator room).
-- **Atmosphere:** day and night lighting (lit windows, light pools, starry sky), fog,
-  environment-map reflections on glass, moving traffic, and synthesized traffic and siren
+- **Shophouse row:** three enterable heritage shophouses on the south avenue: a five-foot-way
+  arcade, a grocer, a kopitiam and a laundry linked at the back, an upper floor with windows over
+  the avenue, and a roof with a water tank and condensers for overwatch. A covered pedestrian
+  skybridge climbs from the park, crosses the avenue and enters the upper floor.
+- **East supply branch:** the B1 corridor continues east past a pump-room bulkhead to the
+  **E3 supply shaft** in the east lot. The tunnel control server intel reveals it.
+- **Atmosphere:** day and night lighting (lit windows, light pools, starry sky), fog with ground
+  haze, environment-map reflections on glass, moving traffic, and synthesized traffic and siren
   ambience.
+- **Weather:** Clear or Rain (main menu, all maps). Rain brings an overcast sky, closer grey fog,
+  a weak sun, wet glossy surfaces, streaks around the player (not indoors or underground) and a
+  rain sound bed.
 - **Performance:** static city geometry merged per material, instanced trees, lights, cars and
   skyline, a sun shadow that follows the player, and lazily built cutaway and drilling scenes.
   Per-flight effects are disposed after each strike.
@@ -279,7 +300,7 @@ loads only what the manifest lists. If a file is missing, it uses a procedural f
 | HDRIs (day sky, night sky, concrete-tunnel interior) | 3 | Poly Haven, CC0 |
 | glTF props: street lamp, covered car, AC unit, bins, utility boxes, seating, planter, shrub, duct, pipes, cables, fluorescent fitting, wall lamp, rack, desk, monitor, generator, barrels, crates, roller shutter, security light, power box | 27 | Poly Haven, CC0 |
 | glTF weapons: service pistol, bolt-action rifle (sniper) | 2 | Poly Haven, CC0 |
-| Rigged soldier (Idle/Walk/Run), `characters/kl_soldier.glb` | 1 | Original, project-owned. Built with Blender 5.2 by `scripts/blender/build_soldier.py` from `docs/reference/tactical-soldier-turnaround-sheet.png` (shemagh, plate carrier, hydration pack, camo cargo trousers, tan boots), with procedurally generated textures. About 15.9k triangles and 0.9 MB. Rebuild with `blender --background --factory-startup --python scripts/blender/build_soldier.py -- public/assets/characters/kl_soldier.glb [previewDir]`. |
+| Rigged soldier (Idle/Walk/Run), `characters/kl_soldier.glb` | 1 | Original, project-owned. Built with Blender 5.2 by `scripts/blender/build_soldier.py` from `docs/reference/tactical-soldier-turnaround-sheet.png` (shemagh, plate carrier, hydration pack, camo cargo trousers, tan boots), with procedurally generated textures. About 15.9k triangles, plus a 3.5k-triangle distance LOD with its textures baked into vertex colours; 1.3 MB. Rebuild with `blender --background --factory-startup --python scripts/blender/build_soldier.py -- public/assets/characters/kl_soldier.glb [previewDir]`. |
 
 ### Rendering
 - **Tone mapping and colour:** ACES filmic, sRGB output, eye adaptation (exposure rises in
@@ -297,13 +318,28 @@ loads only what the manifest lists. If a file is missing, it uses a procedural f
   static architecture.
 - **Light budget:** dynamic lights are capped. Night streetlights use a pool of 4 lights
   reassigned to the lamps nearest the player; other fixtures are emissive and rely on bloom.
+  Every light exists from level load (unused ones sit at zero intensity), because changing the
+  light count recompiles every shader.
+- **Atmosphere** (`src/render/Atmosphere.js`): the fog shader chunk adds an exponential ground
+  haze integrated along each view ray, plus a warm in-scatter toward the sun. It runs inside each
+  material's own shader, so there is no extra pass. The haze is on at High and Ultra; the sun tint
+  is on at every preset.
+- **Shader warm-up:** shaders compile asynchronously at level load and after a preset change,
+  and the world isn't drawn until they finish. Every viewmodel in the loadout is prebuilt, so
+  switching weapons never compiles.
+- **Level of detail:**
+  - Facades and city geometry are merged per 48 m chunk, so off-screen blocks are culled.
+  - Facade trim is drawn only near the player.
+  - Soldiers switch to a 3.5k-triangle single-material model beyond 24 m and skip skinning when
+    off-screen.
+  - Guns become a simple proxy beyond 40 m.
 
 | Preset | Resolution | Shadows | Post |
 | --- | --- | --- | --- |
 | Low | 1× | off | none |
 | Medium | 1× | 2048, PCF | bloom, SMAA |
-| High | 1.25× | 2048, soft | GTAO, bloom, SMAA |
-| Ultra | 1.5× | 4096, soft | GTAO (16 samples), bloom, 4× MSAA |
+| High | 1.25× | 4096, soft | GTAO, bloom, SMAA, ground haze |
+| Ultra | 1.5× | 4096, soft | GTAO (16 samples), bloom, 4× MSAA, ground haze |
 | **Auto** (default) | Medium on integrated or mobile GPUs, High otherwise | | |
 
 **Dynamic resolution** (on by default; a toggle in Settings) lowers the render scale to as little
@@ -335,14 +371,17 @@ as 60% when frames take longer than about 22 ms.
 
 ### Measured performance
 Measured on the development machine: Intel integrated graphics (ANGLE D3D11), 1920×1080, median
-of 3 interleaved trials, using `node scripts/gfx-bench.mjs`.
+of 2 interleaved trials, using `node scripts/gfx-bench.mjs`.
 
 | View | Low | Medium | High | Ultra | Auto (Medium) + dynamic res |
 | --- | --- | --- | --- | --- | --- |
-| Training Depot | 140 | 53 | 40 | 26 | 53 fps at 100% resolution |
-| KL towers | 41 | 24 | 14 | 9 | 36 fps at 60% resolution |
-| KL street | 39 | 24 | 14 | 9 | 37 fps at 60% resolution |
-| KL tunnel | 37 | 23 | 13 | 9 | 26 fps at 60% resolution |
+| Training Depot | 132 | 52 | 35 | 24 | 45 fps at 100% resolution |
+| KL towers | 36 | 20 | 10 | 8 | 33 fps at 60% resolution |
+| KL street | 38 | 23 | 12 | 9 | 35 fps at 60% resolution |
+| KL tunnel | 35 | 22 | 11 | 8 | 36 fps at 60% resolution |
+
+High and Ultra now draw much more than before: 4096 shadows, ground haze, a longer facade-detail
+range and up to 2 million triangles. They are meant for discrete GPUs.
 
 **The 60 fps target is not met on this integrated GPU in the city.** It has not been measured
 on a discrete desktop GPU. Run `node scripts/gfx-bench.mjs` on your own hardware to measure it.

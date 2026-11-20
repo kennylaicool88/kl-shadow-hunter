@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS = {
   primary: 'rifle', // mirrors loadout.primary (kept for older code paths)
   sandboxUnlock: false, // armory: ignore unlock requirements
   timeOfDay: 'day', // day | night (Kuala Lumpur mission)
+  weather: 'clear', // clear | rain
   // Movement tuning
   moveSpeed: 1.0, // multiplier 0.7 – 1.3
 };

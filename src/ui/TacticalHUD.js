@@ -103,6 +103,7 @@ export class TacticalHUD {
     g.fillStyle = '#5a6068';
     g.fillRect(X(G.x0), Z(G.z0), (G.x1 - G.x0) * s, (G.z1 - G.z0) * s);
     g.fillRect(X(Lb.x0), Z(Lb.z0), (Lb.x1 - Lb.x0) * s, (Lb.z1 - Lb.z0) * s);
+    for (const r of [L.shophouses, L.skybridge]) if (r) g.fillRect(X(r.x0), Z(r.z0), (r.x1 - r.x0) * s, (r.z1 - r.z0) * s);
     g.fillStyle = '#6b6f76'; g.fillRect(X(P.x0), Z(P.z0), (P.x1 - P.x0) * s, (P.z1 - P.z0) * s);
     g.fillStyle = '#d8dde2';
     for (const t of L.towers) { g.beginPath(); g.arc(X(t.x), Z(t.z), 9 * s, 0, 7); g.fill(); }

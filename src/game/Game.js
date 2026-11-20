@@ -26,6 +26,8 @@ import { GameState } from './GameState.js';
 import { installTestHooks } from './testHooks.js';
 import { AssetLibrary } from '../render/AssetLibrary.js';
 import { RenderPipeline, QUALITY, detectQuality } from '../render/RenderPipeline.js';
+import '../render/Atmosphere.js'; // patches the fog shader chunks before any material compiles
+import { WeatherSystem } from '../world/Weather.js';
 
 const _fwd = new THREE.Vector3();
 const _mk = new THREE.Vector3();
@@ -83,6 +85,7 @@ export class Game {
     this.throwables = new ThrowableSystem(this);
     this.equipment = new EquipmentSystem(this);
     this.surveillance = new SurveillanceSystem(this);
+    this.weather = new WeatherSystem(this);
     this.shakeT = 0;
     this.shakeAmp = 0;
 
@@ -141,6 +144,7 @@ export class Game {
     this.weapons.renderer = this.renderer;
     this.enemies.setAssets(this.assets);
     this.surveillance.setLevel('depot');
+    this.weather.apply(true);
     this._updateLoadoutSummary();
     this.menu.setLoading('Compiling shaders…');
     await this.precompile();
@@ -151,11 +155,18 @@ export class Game {
 
   // Shader programs are compiled off the main thread (KHR_parallel_shader_compile) so the first
   // frames after a level loads don't stall; every scene light already exists at this point.
+  // While it runs the world isn't drawn (the last frame stays up): drawing would force the same
+  // programs to compile synchronously and freeze the tab for seconds on some drivers.
   async precompile() {
+    this.compiling = (this.compiling || 0) + 1;
+    const cap = new Promise((r) => setTimeout(r, 8000)); // never hold rendering longer than this
     try {
-      await this.renderer.compileAsync(this.scene, this.camera);
-      await this.renderer.compileAsync(this.weapons.viewScene, this.weapons.viewCamera);
+      await Promise.race([cap, (async () => {
+        await this.renderer.compileAsync(this.scene, this.camera);
+        await this.renderer.compileAsync(this.weapons.viewScene, this.weapons.viewCamera);
+      })()]);
     } catch (err) { console.warn('[render] precompile', err.message); }
+    this.compiling--;
   }
 
   // ------------------------------------------------------------------ wiring
@@ -271,11 +282,13 @@ export class Game {
         this.scene.traverse((o) => {
           if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; });
         });
+        this.precompile();
       }
     }
     if (key === 'volume') this.audio.setVolume(this.settings.volume);
     if (key === 'dynamicRes') { this.drs.scale = 1; this.resize(); }
-    if (key === 'timeOfDay' && this.map.setTimeOfDay) this.map.setTimeOfDay(this.settings.timeOfDay);
+    if (key === 'timeOfDay' && this.map.setTimeOfDay) { this.map.setTimeOfDay(this.settings.timeOfDay); this.weather.apply(true); }
+    if (key === 'weather' || key === 'graphics') this.weather.apply();
   }
 
   resize() {
@@ -406,6 +419,7 @@ export class Game {
       this.throwables.clear();
       this.levelId = id;
       this.surveillance.setLevel(id);
+      this.weather.apply(true);
       this.menu.setLoading('Compiling shaders…');
       await this.precompile();
     }
@@ -433,8 +447,9 @@ export class Game {
       });
     }
     if (level === 'kl') {
-      if (this.map.setTimeOfDay && this.map.night !== (this.settings.timeOfDay === 'night')) this.map.setTimeOfDay(this.settings.timeOfDay);
+      if (this.map.setTimeOfDay && this.map.night !== (this.settings.timeOfDay === 'night')) { this.map.setTimeOfDay(this.settings.timeOfDay); this.weather.apply(true); }
       this.mission.start();
+      this.weather.apply();
       return Promise.resolve();
     }
     if (this.mission) this.mission.stop();
@@ -579,6 +594,7 @@ export class Game {
     }
     this.effects.update(dt);
     this.map.update(dt, this.camera);
+    this.weather.update(dt);
     // Eye adaptation: maps may ask for a different exposure (e.g. darker interiors / tunnels).
     const targetExposure = this.map.exposureAt ? this.map.exposureAt(this.camera.position) : 1;
     this.exposure += (targetExposure - this.exposure) * Math.min(1, dt * 1.5);
@@ -591,7 +607,7 @@ export class Game {
     if (this.state !== 'menu') this._updateCamera();
     this.weapons.updateViewModel(dt);
     if (this.state === 'playing' || this.state === 'paused') this._updateHud(dt);
-    this._render();
+    if (!this.compiling) this._render();
     this._fps(dt);
   }
 

@@ -206,6 +206,19 @@ try {
     check('[KL] 16. FPS movement still works', zA - zB > 1.5, `moved ${(zA - zB).toFixed(2)}m`);
   }
 
+  // ---- Weather: rain on and off restores the map's own lighting
+  const wx = await page.evaluate(() => {
+    const g = window.__game;
+    const fog0 = [g.scene.fog.near, g.scene.fog.far];
+    const sun0 = g.map.sun.intensity;
+    g.settings.weather = 'rain'; g.applySettings('weather');
+    const wet = { streaks: g.weather.streaks.count, fogNear: g.scene.fog.near, sun: g.map.sun.intensity };
+    g.settings.weather = 'clear'; g.applySettings('weather');
+    return { fog0, sun0, wet, fog1: [g.scene.fog.near, g.scene.fog.far], sun1: g.map.sun.intensity, streaks: g.weather.streaks.count };
+  });
+  check('rain adds streaks, closer fog and a dimmer sun', wx.wet.streaks > 0 && wx.wet.fogNear < wx.fog0[0] && wx.wet.sun < wx.sun0, JSON.stringify(wx.wet));
+  check('clear weather restores fog and sun', wx.streaks === 0 && wx.fog1[0] === wx.fog0[0] && wx.fog1[1] === wx.fog0[1] && wx.sun1 === wx.sun0, `fog ${wx.fog1} sun ${wx.sun1}`);
+
   // ---- 14. Pause / settings
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.__game.state === 'paused', { timeout: 10000 }).catch(() => {});

@@ -61,6 +61,35 @@ test('garage rooftop (y = 12) is reachable by the exterior staircase', () => {
   assert.ok(b.pos.x < -77 && Math.abs(b.pos.y - 12) < 0.01, `on roof: x=${b.pos.x.toFixed(1)} y=${b.pos.y.toFixed(2)}`);
 });
 
+test('shophouse upper floor is reachable by its stairs and by the skybridge', () => {
+  const up = data.shophouses.up;
+  const upstairs = { x: -56, y: up, z: 64 };
+  const viaStairs = nav.findPath({ x: -57, y: 0.15, z: 65 }, upstairs);
+  assert.ok(viaStairs && viaStairs.every((p) => p.z > 58), 'path climbs the interior stairs (stays indoors)');
+  // Across the bridge is ~42 m; the street + interior stairs detour is over 70 m.
+  const from = { x: -50.8, y: 0, z: 22 };
+  const viaBridge = nav.findPath(from, { x: -50.8, y: up, z: 62 });
+  assert.ok(viaBridge, 'no path from the park to the upper floor');
+  let len = 0, prev = from;
+  for (const p of viaBridge) { len += Math.hypot(p.x - prev.x, p.y - prev.y, p.z - prev.z); prev = p; }
+  assert.ok(len < 55, `route is ${len.toFixed(0)} m – not via the skybridge`);
+  // Ground floor under the upper slab keeps its own nav nodes
+  assert.ok(nav.nodes.some((n) => n.x > -59 && n.x < -43 && n.z > 59 && n.z < 76 && n.y < 0.5), 'ground-floor nodes');
+});
+
+test('shophouse roof is reachable on foot from the upper floor', () => {
+  const b = { pos: { x: -43, y: data.shophouses.up, z: 75 }, radius: 0.4, height: 1.8, grounded: true };
+  for (let i = 0; i < 600 && b.pos.z > 67.2; i++) col.moveBody(b, 0, -0.02, -0.03);
+  for (let i = 0; i < 60; i++) col.moveBody(b, 0, -0.02, -0.03);
+  assert.ok(Math.abs(b.pos.y - data.shophouses.roof) < 0.01, `reached y=${b.pos.y.toFixed(2)} z=${b.pos.z.toFixed(1)}`);
+});
+
+test('east supply branch links the tunnels to the E3 shaft', () => {
+  const path = nav.findPath({ x: 0, y: TUNNEL_Y, z: 46 }, { x: 92, y: 0, z: 74 });
+  assert.ok(path, 'no path from the tunnel to the east lot via E3');
+  assert.ok(nav.nodes.some((n) => n.y < -1 && n.y > TUNNEL_Y + 0.5 && n.x > 90 && n.x < 94), 'nodes on E3 stairs');
+});
+
 test('landmarks are not obstructed and bunkers sit away from them', () => {
   // Nothing except the towers/podium may rise into the air space around the Twin Towers.
   for (const s of data.solids) {

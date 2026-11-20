@@ -315,7 +315,9 @@ export class KualaLumpurMap {
     if (p.y < -3) return 1.5;
     const inMall = p.x > -40 && p.x < 40 && p.z > -66 && p.z < -36 && p.y < 11;
     const inLobby = p.x > 74 && p.z > 6 && p.z < 36 && p.y < 6;
-    if (inMall || inLobby) return 1.3;
+    const sh = this.data.shophouses;
+    const inShop = sh && p.x > sh.x0 && p.x < sh.x1 && p.z > 58.5 && p.z < sh.z1 && p.y < sh.roof - 0.5;
+    if (inMall || inLobby || inShop) return 1.3;
     return 1.0;
   }
 

@@ -102,6 +102,7 @@ export class Menu {
     this._bindRange('opt-rounds', 'roundsToWin', (v) => v, (v) => parseInt(v, 10));
     this._bindSelect('opt-roundtime', 'roundTime', (v) => parseInt(v, 10));
     this._bindSelect('opt-timeofday', 'timeOfDay');
+    this._bindSelect('opt-weather', 'weather');
     this._updateModeRows();
   }
 

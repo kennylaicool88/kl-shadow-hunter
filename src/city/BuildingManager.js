@@ -51,12 +51,22 @@ export class BuildingManager {
       hoarding: () => new THREE.MeshStandardMaterial({ map: this.tex.hoarding, roughness: 0.6, metalness: 0.1, vertexColors: true }),
       shop: () => new THREE.MeshStandardMaterial({ color: 0x46545e, metalness: 0.85, roughness: 0.08, vertexColors: true }),
       lobby: () => new THREE.MeshStandardMaterial({ color: 0x5c7383, metalness: 0.85, roughness: 0.07, vertexColors: true }),
+      // Shophouse row and skybridge
+      shopwall: () => new THREE.MeshStandardMaterial({ color: 0xf0e2bc, roughness: 0.88, metalness: 0, vertexColors: true }), // painted plaster
+      ceiling: () => new THREE.MeshStandardMaterial({ color: 0xf2efe8, roughness: 0.95, metalness: 0, vertexColors: true }),
+      shopfloor: () => a.pbr('granite', { vertexColors: true, color: 0xc9b8a2, key: 'kl-shopfloor' }),
+      shelf: () => new THREE.MeshStandardMaterial({ color: 0x7a5a3a, metalness: 0, roughness: 0.65, vertexColors: true }),
+      tank: () => new THREE.MeshStandardMaterial({ color: 0x9fa7ad, metalness: 0.7, roughness: 0.35, vertexColors: true }),
+      bridge: () => a.pbr('concrete', { vertexColors: true, color: 0xb6b2aa, key: 'kl-bridge' }),
+      bridgeroof: () => new THREE.MeshStandardMaterial({ color: 0xb4bec6, metalness: 0.6, roughness: 0.35, vertexColors: true }),
+      glassrail: () => new THREE.MeshStandardMaterial({ color: 0x7f9aa8, metalness: 0.3, roughness: 0.05, transparent: true, opacity: 0.4, vertexColors: true }),
+      lamp: () => new THREE.MeshStandardMaterial({ color: 0x202020, emissive: 0xe8f0ff, emissiveIntensity: 4, vertexColors: true }),
     };
     return S[mat] ? S[mat]() : new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.8, vertexColors: true });
   }
 
   static tile(mat) {
-    return { asphalt: 6, paving: 2.5, tunnel: 3.5, tunnelfloor: 4, mall: 3, planter: 2, stairs: 2, hoarding: 6, hedge: 2, container: 3, hut: 3, truck: 3 }[mat] ?? 4;
+    return { asphalt: 6, paving: 2.5, tunnel: 3.5, tunnelfloor: 4, mall: 3, planter: 2, stairs: 2, hoarding: 6, hedge: 2, container: 3, hut: 3, truck: 3, shopwall: 3, shopfloor: 1.5 }[mat] ?? 4;
   }
 
   buildStatic(skipBench) {
@@ -85,7 +95,7 @@ export class BuildingManager {
   // Every high-rise / shophouse solid becomes detailed facade geometry.
   buildFacades() {
     const blocks = this.data.solids.filter((s) => s.mat.startsWith('bld-')).map((s) => ({
-      x0: s.min[0], z0: s.min[2], x1: s.max[0], z1: s.max[2], y0: s.min[1], h: s.max[1], style: s.mat.slice(4),
+      x0: s.min[0], z0: s.min[2], x1: s.max[0], z1: s.max[2], y0: s.min[1], h: s.max[1], style: s.mat.slice(4), skip: s.skipFaces,
     }));
     this.facadeDetail = [];
     for (const m of this.facades.build(blocks, { x: 0, z: 0 })) {

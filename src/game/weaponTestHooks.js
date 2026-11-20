@@ -170,6 +170,8 @@ export function installWeaponHooks(game, hooks, step) {
     db.ai.frozen = false;
     db.ai.goals = [[10, 0, 12]]; // hold position (looking away from the player) until something is heard
     db.ai.path = null;
+    // This checks hearing: a random patrol glance must not spot the player before the first burst.
+    db.ai.diff = { ...db.ai.diff, viewDist: 2 };
     db.ai.setState('patrol');
     thr.throw('decoy', { x: 4, y: 0.3, z: 22 }, { x: 0, y: -1, z: 0 }, 0, p);
     // First reaction to the first fake burst (later it may spot the player and switch target).

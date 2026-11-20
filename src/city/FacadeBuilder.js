@@ -102,12 +102,13 @@ export class FacadeBuilder {
 
   static faces(r) {
     // ox/oz: start corner, d: along-face direction, n: outward normal, L: length
+    // r.skip: side names left bare (faces that sit against another structure)
     return [
-      { ox: r.x0, oz: r.z0, dx: 1, dz: 0, nx: 0, nz: -1, L: r.x1 - r.x0 }, // north
-      { ox: r.x1, oz: r.z1, dx: -1, dz: 0, nx: 0, nz: 1, L: r.x1 - r.x0 }, // south
-      { ox: r.x0, oz: r.z1, dx: 0, dz: -1, nx: -1, nz: 0, L: r.z1 - r.z0 }, // west
-      { ox: r.x1, oz: r.z0, dx: 0, dz: 1, nx: 1, nz: 0, L: r.z1 - r.z0 }, // east
-    ];
+      { side: 'north', ox: r.x0, oz: r.z0, dx: 1, dz: 0, nx: 0, nz: -1, L: r.x1 - r.x0 },
+      { side: 'south', ox: r.x1, oz: r.z1, dx: -1, dz: 0, nx: 0, nz: 1, L: r.x1 - r.x0 },
+      { side: 'west', ox: r.x0, oz: r.z1, dx: 0, dz: -1, nx: -1, nz: 0, L: r.z1 - r.z0 },
+      { side: 'east', ox: r.x1, oz: r.z0, dx: 0, dz: 1, nx: 1, nz: 0, L: r.z1 - r.z0 },
+    ].filter((f) => !(r.skip && r.skip.includes(f.side)));
   }
 
   // Glass core box with window-cell UVs (one emissive/roughness texel per pane).
@@ -241,15 +242,16 @@ export class FacadeBuilder {
 
   // ------------------------------------------------------------------ heritage shophouses
   _shophouse(b, idx) {
-    const r = { x0: b.x0, z0: b.z0, x1: b.x1, z1: b.z1 };
+    const r = { x0: b.x0, z0: b.z0, x1: b.x1, z1: b.z1, skip: b.skip };
     if (r.x1 - r.x0 < 1 || r.z1 - r.z0 < 1) {
       this._push('plaster', worldBox([r.x0, 0, r.z0], [r.x1, b.h, r.z1], 3, { tint: [0.92, 0.88, 0.8] }));
       return;
     }
     const palette = [[0.96, 0.9, 0.74], [0.78, 0.9, 0.84], [0.95, 0.76, 0.66], [0.9, 0.8, 0.55], [0.76, 0.86, 0.93], [0.93, 0.93, 0.9]];
     const rand = rng(idx * 7 + 3);
-    // Solid interior volume behind the facades
-    this._push('plaster', worldBox([r.x0 + 1.2, 0, r.z0 + 1.2], [r.x1 - 1.2, b.h - 0.2, r.z1 - 1.2], 3, { tint: [0.85, 0.82, 0.76] }));
+    // Solid interior volume behind the facades (flush with any bare side)
+    const ins = (side) => (r.skip && r.skip.includes(side) ? 0 : 1.2);
+    this._push('plaster', worldBox([r.x0 + ins('west'), 0, r.z0 + ins('north')], [r.x1 - ins('east'), b.h - 0.2, r.z1 - ins('south')], 3, { tint: [0.85, 0.82, 0.76] }));
     const unit = 4.6;
     const floors = Math.max(2, Math.round(b.h / 4.4));
     const fh = b.h / floors;

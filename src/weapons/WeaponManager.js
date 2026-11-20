@@ -7,6 +7,7 @@ import { buildViewModel, buildGearView, setWeaponAssets } from './WeaponModels.j
 import { buildGrenadeModel, buildEquipmentModel, setEquipmentAssets } from './forge/equipmentModels.js';
 import { THROWABLES, EQUIPMENT, DEFAULT_LOADOUT } from './equipmentData.js';
 import { HIT_MULTIPLIER, rangeFalloff } from '../game/combat.js';
+import { traceBullet, penetrationPower } from './penetration.js';
 import { createFlashTexture } from '../maps/Textures.js';
 
 const DEG = Math.PI / 180;
@@ -26,6 +27,8 @@ const _fxM = new THREE.Matrix4();
 const _fxQ = new THREE.Quaternion();
 const _fxOne = new THREE.Vector3(1, 1, 1);
 const _tmp = new THREE.Vector3();
+const _segO = new THREE.Vector3();
+const _exitP = new THREE.Vector3();
 
 // Slot occupant for grenades / held equipment (behaves like a weapon for the shared code paths).
 class GearItem {
@@ -747,29 +750,45 @@ export class WeaponManager {
   }
 
   /**
-   * Cast one bullet. World geometry always blocks: a target is only hit if it is
-   * closer than the first solid along the ray.
+   * Cast one bullet. Thin, penetrable solids (partitions, glass, furniture, hedges) let it through
+   * with reduced damage (see penetration.js); anything else stops it. Targets are only hit inside
+   * the open segments of the bullet's path.
    */
   _fireRay(w, origin, dir, hitTargets, effects) {
     const maxRange = w.cfg.maxRange;
-    const wall = this.world.collision.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, maxRange);
-    const limit = wall ? wall.dist : maxRange;
-    let best = null;
-    let bestTarget = null;
-    for (const t of this.world.getTargets(this.player)) {
-      const h = t.hitTest(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, limit);
-      if (h && (!best || h.dist < best.dist)) { best = h; bestTarget = t; }
+    const segs = traceBullet(this.world.collision, origin, dir, maxRange, penetrationPower(w.cfg));
+    const targets = this.world.getTargets(this.player);
+    let best = null, bestTarget = null, seg = null;
+    for (const s of segs) {
+      _segO.copy(dir).multiplyScalar(s.start).add(origin);
+      for (const t of targets) {
+        const h = t.hitTest(_segO.x, _segO.y, _segO.z, dir.x, dir.y, dir.z, s.end - s.start);
+        if (h && (!best || h.dist < best.dist)) { best = h; bestTarget = t; }
+      }
+      if (best) { best = { ...best, dist: best.dist + s.start }; seg = s; break; }
+      // Entry and exit holes in anything the round passed through (or the final stop)
+      if (s.wall) {
+        this.world.effects.impact(s.wall.point, s.wall.normal, s.wall.solid.mat);
+        if (effects) this.world.audio.impact(s.wall.point, s.wall.solid.mat);
+        if (s.exit) {
+          _exitP.copy(dir).multiplyScalar(s.exit.dist).add(origin);
+          this.world.effects.impact(_exitP, s.exit.normal, s.wall.solid.mat);
+        }
+      }
     }
+    const last = segs[segs.length - 1];
+    this._nearMisses(targets, bestTarget, origin, dir, best ? best.dist : last.end);
 
     if (bestTarget && bestTarget.team === this.player.team) {
       // Teammates stop the bullet but take no damage.
       _end.copy(dir).multiplyScalar(best.dist).add(origin);
     } else if (bestTarget) {
       _end.copy(dir).multiplyScalar(best.dist).add(origin);
-      const raw = w.cfg.damage * HIT_MULTIPLIER[best.part] * rangeFalloff(best.dist, w.cfg.range);
+      const raw = w.cfg.damage * HIT_MULTIPLIER[best.part] * rangeFalloff(best.dist, w.cfg.range) * seg.mul;
       const res = this.world.dealDamage(bestTarget, raw, {
         attacker: this.player, part: best.part, armorRatio: w.cfg.armorRatio,
         weaponId: w.id, weaponName: w.cfg.name, direction: { x: dir.x, y: dir.y, z: dir.z }, point: _end.clone(),
+        penetrated: seg.mul < 1,
       });
       const prev = hitTargets.get(bestTarget) || { killed: false, head: false };
       prev.killed = prev.killed || res.killed;
@@ -777,10 +796,8 @@ export class WeaponManager {
       hitTargets.set(bestTarget, prev);
       this.world.effects.blood(_end, dir, best.part === 'head');
       this.world.audio.fleshHit(_end);
-    } else if (wall) {
-      _end.set(wall.point.x, wall.point.y, wall.point.z);
-      this.world.effects.impact(wall.point, wall.normal, wall.solid.mat);
-      if (effects) this.world.audio.impact(wall.point, wall.solid.mat);
+    } else if (last.wall && !last.exit) {
+      _end.set(last.wall.point.x, last.wall.point.y, last.wall.point.z);
     } else {
       _end.copy(dir).multiplyScalar(maxRange).add(origin);
     }
@@ -788,6 +805,19 @@ export class WeaponManager {
     if (effects && Math.random() < (w.cfg.tracerChance ?? 0.3)) {
       this._muzzleWorldPos(_muzzle);
       this.world.effects.addTracer(_muzzle, _end, w.cfg.tracerColor);
+    }
+  }
+
+  // Hostile bots within 1.6 m of the bullet's path (up to where it stopped) are suppressed.
+  _nearMisses(targets, hit, origin, dir, reach) {
+    for (const t of targets) {
+      if (t === hit || !t.ai || !t.ai.suppress || t.team === this.player.team || !t.alive) continue;
+      const p = t.body.pos;
+      const px = p.x - origin.x, py = p.y + 1.3 - origin.y, pz = p.z - origin.z;
+      const along = px * dir.x + py * dir.y + pz * dir.z;
+      if (along < 2 || along > reach) continue;
+      const miss = Math.hypot(px - dir.x * along, py - dir.y * along, pz - dir.z * along);
+      if (miss < 1.6) t.ai.suppress(this.player);
     }
   }
 

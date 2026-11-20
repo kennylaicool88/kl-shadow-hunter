@@ -183,6 +183,18 @@ export class EnemyAI {
     }
   }
 
+  // A round cracked past (near miss): aim degrades while suppressed, and a bot under sustained fire
+  // breaks for cover. Unaware bots turn toward the shooter.
+  suppress(attacker) {
+    if (!this.bot.alive || this.frozen) return;
+    this.suppressTime = Math.min(3, (this.suppressTime || 0) + 0.7);
+    if (this.state === 'patrol' || this.state === 'investigate' || this.state === 'idle') {
+      this.onDamaged(attacker);
+      return;
+    }
+    if (this.state === 'attack' && this.suppressTime > 1.3 && Math.random() < this.diff.coverChance) this._findCover();
+  }
+
   onDamaged(attacker) {
     if (!attacker || !attacker.body) return;
     this.lastSeen.x = attacker.body.pos.x;
@@ -218,6 +230,7 @@ export class EnemyAI {
     this.blindTime = Math.max(0, this.blindTime - dt);
     this.stunTime = Math.max(0, this.stunTime - dt);
     this.empTime = Math.max(0, this.empTime - dt);
+    this.suppressTime = Math.max(0, (this.suppressTime || 0) - dt);
     // Burning ground: get out first.
     const fire = this.world.hazardAt && this.world.hazardAt(bot.body.pos);
     if (fire) {
@@ -466,7 +479,8 @@ export class EnemyAI {
     const wantYaw = Math.atan2(-dx, -dz);
     const wantPitch = Math.atan2(dy, horiz);
     if (settle) this.focus = Math.min(1, this.focus + dt / this.diff.focusTime);
-    const errScale = (1 - this.focus * 0.75) * (this.empTime > 0 ? 1.8 : 1) * (this.stunTime > 0 ? 1.6 : 1); // EMP: optics dead
+    const errScale = (1 - this.focus * 0.75) * (this.empTime > 0 ? 1.8 : 1) * (this.stunTime > 0 ? 1.6 : 1) // EMP: optics dead
+      * (1 + (this.suppressTime || 0) * 0.5); // rounds cracking past ruin a bot's aim
     const ty = wantYaw + this.errYaw * errScale;
     const tp = wantPitch + this.errPitch * errScale;
     const maxStep = this.diff.aimSpeed * dt * (this.stunTime > 0 ? 0.35 : 1);

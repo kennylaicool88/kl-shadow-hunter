@@ -596,6 +596,20 @@ export class AudioManager {
     }, 3500);
   }
 
+  // Rain bed: a broadband hiss plus a low patter rumble, faded in and out.
+  setRain(on) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    if (on && !this.rain) {
+      this.rain = [this._loop('highpass', 1800, 0.5, 0), this._loop('lowpass', 420, 0.8, 0)];
+      this.rain[0].g.gain.linearRampToValueAtTime(0.07, t + 1.5);
+      this.rain[1].g.gain.linearRampToValueAtTime(0.05, t + 1.5);
+    } else if (!on && this.rain) {
+      for (const r of this.rain) { r.g.gain.linearRampToValueAtTime(0, t + 0.8); r.src.stop(t + 0.9); }
+      this.rain = null;
+    }
+  }
+
   stopAmbience() {
     if (this.amb) for (const a of this.amb) { try { a.src.stop(); } catch { /* already stopped */ } }
     this.amb = null;
